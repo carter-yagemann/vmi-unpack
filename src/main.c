@@ -193,6 +193,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "ERROR: Unpack - Failed to initialize process VMI\n");
         monitor_destroy(vmi);
         vmi_destroy(vmi);
+        stop_dump_thread();
         return EXIT_FAILURE;
     }
     vmi_register_event(vmi, &cr3_monitoring);
