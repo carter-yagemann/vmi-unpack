@@ -34,12 +34,14 @@ typedef struct {
     gint64 kthread_process;
     gint64 eprocess_pname;
     gint64 eprocess_pid;
+    gint64 eprocess_parent_pid;
 } windows_rekall_t;
 
 typedef struct {
     gint64 current_task;
     gint64 task_struct_comm;
     gint64 task_struct_pid;
+    gint64 task_struct_parent;
 } linux_rekall_t;
 
 /**

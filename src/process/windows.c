@@ -51,6 +51,10 @@ addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event) {
 
     addr_t process;
     addr_t thread = vmi_current_thread_windows(vmi, event);
+
+    if (!thread)
+        return 0;
+
     addr_t kthread = thread + process_vmi_windows_rekall.kthread_process;
     if (vmi_read_addr_va(vmi, kthread, 0, &process) != VMI_SUCCESS)
         return 0;
@@ -66,6 +70,9 @@ vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event) {
     }
 
     addr_t process = vmi_current_process_windows(vmi, event);
+
+    if (!process)
+        return 0;
 
     vmi_pid_t pid;
     addr_t eprocess_pid = process + process_vmi_windows_rekall.eprocess_pid;
@@ -83,7 +90,31 @@ char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event) {
     }
 
     addr_t process = vmi_current_process_windows(vmi, event);
+
+    if (!process)
+        return NULL;
+
     addr_t eprocess_pname = process + process_vmi_windows_rekall.eprocess_pname;
 
     return vmi_read_str_va(vmi, eprocess_pname, 0);
+}
+
+vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event) {
+
+    if (!process_vmi_ready) {
+        fprintf(stderr, "ERROR: Windows Process VMI - Not initialized\n");
+        return 0;
+    }
+
+    addr_t process = vmi_current_process_windows(vmi, event);
+
+    if (!process)
+        return 0;
+
+    vmi_pid_t parent_pid;
+    addr_t eprocess_parent_pid = process + process_vmi_windows_rekall.eprocess_parent_pid;
+    if (vmi_read_32_va(vmi, eprocess_parent_pid, 0, (uint32_t *) &parent_pid) != VMI_SUCCESS)
+        return 0;
+
+    return parent_pid;
 }

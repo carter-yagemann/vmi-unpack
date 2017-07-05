@@ -38,7 +38,7 @@ static void close_handler(int sig) {
 /**
  * Callback that's invoked when a process tries to write then execute.
  */
-void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, page_cat_t cat) {
+void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t cat) {
 
     printf("Caught write then execute! [EIP=0x%lx]\n", event->x86_regs->rip);
 }
