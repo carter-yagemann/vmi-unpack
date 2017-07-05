@@ -36,6 +36,7 @@ GQueue *dump_queue;
 uint64_t layer_num;
 
 typedef struct {
+    vmi_pid_t pid;
     reg_t rip;
     char *buff;
     uint64_t size;
@@ -60,8 +61,9 @@ void stop_dump_thread();
  * @param buffer A pointer to the buffer to dump. This should be left allocated
  * and the worker thread will handle freeing it.
  * @param size The size of the buffer.
+ * @param pid The PID of the process that executed the page.
  * @param rip The value of the RIP register when this layer was executed.
  */
-void add_to_dump_queue(char *buffer, uint64_t size, reg_t rip);
+void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip);
 
 #endif

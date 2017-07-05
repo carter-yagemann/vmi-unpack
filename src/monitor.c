@@ -247,7 +247,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event) {
 
     if (*cat_ptr == PAGE_CAT_4KB_FRAME || *cat_ptr == PAGE_CAT_2MB_FRAME || *cat_ptr == PAGE_CAT_1GB_FRAME) {
         if (event->mem_event.out_access & VMI_MEMACCESS_X) {
-            cb_event->cb(vmi, event, *cat_ptr);
+            cb_event->cb(vmi, event, *pid_ptr, *cat_ptr);
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_W, 0);
         } else if (event->mem_event.out_access & VMI_MEMACCESS_W) {
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);

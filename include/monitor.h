@@ -48,8 +48,8 @@ typedef enum {
     PAGE_CAT_1GB_FRAME,
 } page_cat_t;
 
-// args: vmi, event, page category
-typedef void (*page_table_monitor_cb_t)(vmi_instance_t,vmi_event_t*,page_cat_t);
+// args: vmi, event, pid, page category
+typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t*, vmi_pid_t, page_cat_t);
 
 typedef struct {
     addr_t paddr;

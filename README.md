@@ -70,7 +70,7 @@ One of the following must be provided:
 The current output of VMI-Unpack is very basic. Every time the target process
 writes data to a page and then executes it, that page will be extracted as a
 layer. Layers are written to the provided output directory in the form
-`<layer>-<rip>.bin` where `<layer>` starts at 0 and increments with each newly
+`<pid>-<layer>-<rip>.bin` where `<layer>` starts at 0 and increments with each newly
 extracted layer and `<rip>` is the value of the program counter when the layer
 is first executed. This value can also be interpreted as the virtual address
 the layer starts at.

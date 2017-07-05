@@ -31,14 +31,15 @@
 
 #include <dump.h>
 
-char *gen_layer_filename(reg_t rip) {
+char *gen_layer_filename(vmi_pid_t pid, reg_t rip) {
 
     int dir_len = strlen(dump_output_dir);
 
-    // format: <output_dir><layer>-<rip>.bin
-    char *filename = (char *) malloc(dir_len + 38);
-    sprintf(filename, "%s%016lx-%016lx.bin", dump_output_dir, layer_num, rip);
+    // format: <output_dir><pid>-<layer>-<rip>.bin\0
+    char *filename = (char *) malloc(dir_len + 49);
+    sprintf(filename, "%s%010d-%016lx-%016lx.bin", dump_output_dir, pid, layer_num, rip);
 
+    // TODO - Layer number should be per-PID
     layer_num++;
 
     return filename;
@@ -55,12 +56,12 @@ void *dump_worker_loop(void *data) {
 
         layer = (dump_layer_t *) g_queue_pop_head(dump_queue);
 
-        if (layer->rip == 0 && layer->buff == NULL && layer->size == 0) {
+        if (layer->pid == 0 && layer->rip == 0 && layer->buff == NULL && layer->size == 0) {
             free(layer);
             break; // signal to stop
         }
 
-        char *filename = gen_layer_filename(layer->rip);
+        char *filename = gen_layer_filename(layer->pid, layer->rip);
         ofile = fopen(filename, "wb");
         fwrite(layer->buff, sizeof(char), layer->size, ofile);
         fclose(ofile);
@@ -96,6 +97,7 @@ void start_dump_thread(char *dir) {
     }
     dump_queue = g_queue_new();
 
+    // TODO - layer should be per-PID
     layer_num = 0;
 
     // Start worker thread
@@ -105,7 +107,7 @@ void start_dump_thread(char *dir) {
 void stop_dump_thread() {
 
     // Signal the worker that we're done by adding an empty item to its queue
-    add_to_dump_queue(NULL, 0, 0);
+    add_to_dump_queue(NULL, 0, 0, 0);
 
     pthread_join(dump_worker, NULL);
 
@@ -114,9 +116,10 @@ void stop_dump_thread() {
     g_queue_free(dump_queue);
 }
 
-void add_to_dump_queue(char *buffer, uint64_t size, reg_t rip) {
+void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip) {
 
     dump_layer_t *layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
+    layer->pid = pid;
     layer->rip = rip;
     layer->buff = buffer;
     layer->size = size;

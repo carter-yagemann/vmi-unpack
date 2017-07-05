@@ -48,7 +48,7 @@ static void close_handler(int sig) {
 /**
  * Callback that's invoked when a process tries to write then execute.
  */
-void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, page_cat_t page_cat) {
+void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat) {
 
     uint64_t page_size;
 
@@ -72,12 +72,13 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, page_cat_t page_cat) {
         return;
     }
 
+    // Extract the W2X page from the guest VM
     addr_t paddr = (event->mem_event.gfn << 12) + event->mem_event.offset;
     uint64_t dump_size = page_size - event->mem_event.offset;
-    char * buffer = (char *) malloc(dump_size);
+    char * buffer = (char *) malloc(dump_size); // TODO - Cache allocate page sizes for better performance
     vmi_read_pa(vmi, paddr, (void *) buffer, dump_size);
 
-    add_to_dump_queue(buffer, dump_size, event->x86_regs->rip);
+    add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip);
 }
 
 void usage(char *name) {
