@@ -33,14 +33,24 @@
 
 char *gen_layer_filename(vmi_pid_t pid, reg_t rip) {
 
+    uint64_t *layer_ptr;
     int dir_len = strlen(dump_output_dir);
+
+    if (!g_hash_table_contains(pid_layer, &pid)) {
+        vmi_pid_t *pid_ptr = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
+        *pid_ptr = pid;
+        layer_ptr = (uint64_t *) malloc(sizeof(uint64_t));
+        *layer_ptr = 0;
+        g_hash_table_insert(pid_layer, pid_ptr, layer_ptr);
+    }
+
+    layer_ptr = (uint64_t *) g_hash_table_lookup(pid_layer, &pid);
 
     // format: <output_dir><pid>-<layer>-<rip>.bin\0
     char *filename = (char *) malloc(dir_len + 49);
-    sprintf(filename, "%s%010d-%016lx-%016lx.bin", dump_output_dir, pid, layer_num, rip);
+    sprintf(filename, "%s%010d-%016lx-%016lx.bin", dump_output_dir, pid, *layer_ptr, rip);
 
-    // TODO - Layer number should be per-PID
-    layer_num++;
+    (*layer_ptr)++;
 
     return filename;
 }
@@ -90,15 +100,13 @@ void start_dump_thread(char *dir) {
         dump_output_dir[tail + 1] = '\0';
     }
 
-    // Create semaphore and queue
+    // Create semaphore, queue, and hashtable
     if(sem_init(&dump_sem, 0, 0)) {
         fprintf(stderr, "ERROR: Dump Thread - Failed to initialize semaphore\n");
         return;
     }
     dump_queue = g_queue_new();
-
-    // TODO - layer should be per-PID
-    layer_num = 0;
+    pid_layer = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
 
     // Start worker thread
     pthread_create(&dump_worker, NULL, dump_worker_loop, NULL);
@@ -114,6 +122,7 @@ void stop_dump_thread() {
     free(dump_output_dir);
     sem_destroy(&dump_sem);
     g_queue_free(dump_queue);
+    g_hash_table_destroy(pid_layer);
 }
 
 void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip) {

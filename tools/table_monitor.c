@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 
     vmi_pause_vm(vmi);
     monitor_init(vmi);
-    monitor_add_page_table(vmi, atoi(argv[2]), w2x_cb);
+    monitor_add_page_table(vmi, atoi(argv[2]), w2x_cb, MONITOR_FOLLOW_REMAPPING);
     vmi_resume_vm(vmi);
 
     // Main loop

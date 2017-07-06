@@ -30,6 +30,7 @@
 
 #include <monitor.h>
 #include <paging/intel_64.h>
+#include <vmi/process.h>
 
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
@@ -212,6 +213,48 @@ void process_pending_rescan(gpointer data, gpointer user_data) {
     pending_page_rescan = g_slist_remove(pending_page_rescan, data);
 }
 
+void cr3_callback_dispatcher(gpointer cb, gpointer event) {
+
+    ((event_callback_t)cb)(monitor_vmi, event);
+}
+
+event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event) {
+
+    // If there are any registered callbacks, invoke them
+    g_slist_foreach(cr3_callbacks, cr3_callback_dispatcher, event);
+
+    vmi_pid_t pid = vmi_current_pid(vmi, event);
+    page_cb_event_t *cb_event = (page_cb_event_t *) g_hash_table_lookup(page_cb_events, &pid);
+
+    if (cb_event != NULL) {
+        // Check if process' page table has been replaced (e.g. execve). If it has and the callback
+        // wants to follow remappings, the callback has to be registered again. Otherwise, remove
+        // the callback because it's no longer valid.
+        if (cb_event->cr3 != event->x86_regs->cr3) {
+            page_table_monitor_cb_t cb = cb_event->cb;
+            uint8_t cb_flags = cb_event->flags;
+            monitor_remove_page_table(vmi, pid);
+
+            if (cb_flags & MONITOR_FOLLOW_REMAPPING)
+                monitor_add_page_table(vmi, pid, cb, cb_flags);
+        }
+
+        return VMI_EVENT_RESPONSE_NONE;
+    }
+
+    // This process isn't being tracked. If its parent is a process that *is* being tracked, check
+    // if the callback for that process wants to follow children and if so, register it.
+    vmi_pid_t parent_pid = vmi_current_parent_pid(vmi, event);
+    page_cb_event_t *parent_cb_event = (page_cb_event_t *) g_hash_table_lookup(page_cb_events, &parent_pid);
+
+    if (parent_cb_event != NULL && (parent_cb_event->flags & MONITOR_FOLLOW_CHILDREN)) {
+        monitor_add_page_table(vmi, pid, parent_cb_event->cb, parent_cb_event->flags);
+        return VMI_EVENT_RESPONSE_NONE;
+    }
+
+    return VMI_EVENT_RESPONSE_NONE;
+}
+
 event_response_t monitor_handler_ss(vmi_instance_t vmi, vmi_event_t *event) {
 
     g_slist_foreach(pending_page_rescan, process_pending_rescan, NULL);
@@ -276,29 +319,50 @@ void free_page_cb_event(gpointer data) {
     free(data);
 }
 
-void monitor_init(vmi_instance_t vmi) {
+int monitor_init(vmi_instance_t vmi) {
 
     if (vmi_get_page_mode(vmi, 0) != VMI_PM_IA32E) {
         fprintf(stderr, "ERROR: Monitor - Only IA-32e paging is supported at this time\n");
         page_table_monitor_init = 0;
-        return;
+        return 1;
     }
 
     page_cb_events = g_hash_table_new_full(g_int_hash, g_int_equal, NULL, free_page_cb_event);
     page_p2pid = g_hash_table_new_full(g_int64_hash, g_int64_equal, free, free);
     pending_page_rescan = NULL;
+    cr3_callbacks = NULL;
 
     SETUP_MEM_EVENT(&page_table_monitor_event, 0, VMI_MEMACCESS_WX, monitor_handler, 1);
-    vmi_register_event(vmi, &page_table_monitor_event);
+    if (vmi_register_event(vmi, &page_table_monitor_event) != VMI_SUCCESS) {
+        fprintf(stderr, "ERROR: Monitor - Failed to register page table event\n");
+        page_table_monitor_init = 0;
+        return 1;
+    }
 
     uint32_t vcpu_mask = (1U << vmi_get_num_vcpus(vmi)) - 1;
     SETUP_SINGLESTEP_EVENT(&page_table_monitor_ss, vcpu_mask, monitor_handler_ss, 1);
-    vmi_register_event(vmi, &page_table_monitor_ss);
+    if (vmi_register_event(vmi, &page_table_monitor_ss) != VMI_SUCCESS) {
+        fprintf(stderr, "ERROR: Monitor - Failed to register single step event\n");
+        vmi_clear_event(vmi, &page_table_monitor_event, NULL);
+        page_table_monitor_init = 0;
+        return 1;
+    }
+
+    SETUP_REG_EVENT(&page_table_monitor_cr3, CR3, VMI_REGACCESS_W, 0, monitor_handler_cr3);
+    if (vmi_register_event(vmi, &page_table_monitor_cr3) != VMI_SUCCESS) {
+        fprintf(stderr, "ERROR: Monitor - Failed to register CR3 monitoring event\n");
+        vmi_clear_event(vmi, &page_table_monitor_event, NULL);
+        vmi_clear_event(vmi, &page_table_monitor_ss, NULL);
+        page_table_monitor_init = 0;
+        return 1;
+    }
 
     max_paddr = vmi_get_max_physical_address(vmi);
     monitor_vmi = vmi;
 
     page_table_monitor_init = 1;
+
+    return 0;
 }
 
 void monitor_destroy(vmi_instance_t vmi) {
@@ -306,18 +370,22 @@ void monitor_destroy(vmi_instance_t vmi) {
     if (!page_table_monitor_init)
         return;
 
+    vmi_clear_event(vmi, &page_table_monitor_cr3, NULL);
     vmi_clear_event(vmi, &page_table_monitor_event, NULL);
     vmi_clear_event(vmi, &page_table_monitor_ss, NULL);
 
-    g_hash_table_destroy(page_cb_events);
-    g_hash_table_destroy(page_p2pid);
-    g_slist_free_full(pending_page_rescan, free);
-    pending_page_rescan = NULL;
+    // TODO - Freeing of data structures is error prone (double free, segfault)
+    //g_hash_table_destroy(page_cb_events);
+    //g_hash_table_destroy(page_p2pid);
+    //g_slist_free_full(pending_page_rescan, free);
+    //pending_page_rescan = NULL;
+    //g_slist_free_full(cr3_callbacks, NULL);
+    //cr3_callbacks = NULL;
 
     page_table_monitor_init = 0;
 }
 
-void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb) {
+void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags) {
 
     if (cb == NULL) {
         fprintf(stderr, "ERROR: Monitor - Must specify callback function, cannot be null.\n");
@@ -336,6 +404,8 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
 
     page_cb_event_t *cb_event = (page_cb_event_t *) malloc(sizeof(page_cb_event_t));
     cb_event->pid = pid;
+    cb_event->cr3 = vmi_pid_to_dtb(vmi, pid);
+    cb_event->flags = flags;
     cb_event->cb = cb;
     cb_event->trapped_pages = g_hash_table_new_full(g_int64_hash, g_int64_equal, monitor_free_addr, free);
 
@@ -351,10 +421,18 @@ void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid) {
         return;
     }
 
-    if (!g_hash_table_contains(page_cb_events, &pid)) {
-        fprintf(stderr, "ERROR: Monitor - No callback registered for PID %d\n", pid);
+    if (!g_hash_table_contains(page_cb_events, &pid))
         return;
-    }
 
     g_hash_table_remove(page_cb_events, &pid);
+}
+
+void monitor_add_cr3(event_callback_t cb) {
+
+    cr3_callbacks = g_slist_prepend(cr3_callbacks, cb);
+}
+
+void monitor_remove_cr3(event_callback_t cb) {
+
+    cr3_callbacks = g_slist_remove(cr3_callbacks, cb);
 }

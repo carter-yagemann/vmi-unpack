@@ -33,7 +33,7 @@ pthread_t dump_worker;
 char *dump_output_dir;
 sem_t dump_sem;
 GQueue *dump_queue;
-uint64_t layer_num;
+GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 
 typedef struct {
     vmi_pid_t pid;
