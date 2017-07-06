@@ -94,7 +94,7 @@ void usage(char *name) {
     printf("    -p <pid>                 unpack process with provided PID\n");
     printf("    -n <process_name>        unpack process with provided name\n");
     printf("\n");
-    printf("Options arguments:\n");
+    printf("Optional arguments:\n");
     printf("    -f                       also follow children created by target process\n");
 }
 
