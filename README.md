@@ -63,6 +63,9 @@ Required arguments:
 One of the following must be provided:
     -p <pid>                 unpack process with provided PID
     -n <process_name>        unpack process with provided name
+
+Options arguments:
+    -f                       also follow children created by target process
 ```
 
 ## Output

@@ -36,6 +36,7 @@ char *domain_name;
 char *process_name;
 char *output_dir;
 vmi_pid_t process_pid;
+uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
 
 /* Signal handler */
 static int interrupted = 0;
@@ -92,13 +93,16 @@ void usage(char *name) {
     printf("One of the following must be provided:\n");
     printf("    -p <pid>                 unpack process with provided PID\n");
     printf("    -n <process_name>        unpack process with provided name\n");
+    printf("\n");
+    printf("Options arguments:\n");
+    printf("    -f                       also follow children created by target process\n");
 }
 
 event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event) {
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     if (pid == process_pid) {
-        monitor_add_page_table(vmi, pid, w2x_cb, MONITOR_FOLLOW_REMAPPING);
+        monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
         monitor_remove_cr3(monitor_pid);
     }
 
@@ -110,7 +114,7 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event) {
     char *name = vmi_current_name(vmi, event);
     if (!strncmp(name, process_name, strlen(name))) {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
-        monitor_add_page_table(vmi, pid, w2x_cb, MONITOR_FOLLOW_REMAPPING);
+        monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
         monitor_remove_cr3(monitor_name);
     }
 
@@ -130,7 +134,7 @@ int main(int argc, char *argv[]) {
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:o:p:n:")) != -1) {
+    while ((c = getopt(argc, argv, "d:r:o:p:n:f")) != -1) {
         switch (c) {
             case 'd':
                 domain_name = optarg;
@@ -146,6 +150,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'n':
                 process_name = optarg;
+                break;
+            case 'f':
+                tracking_flags |= MONITOR_FOLLOW_CHILDREN;
                 break;
             default:
                 usage(argv[0]);
