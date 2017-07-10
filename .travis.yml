@@ -1,0 +1,47 @@
+language: c
+
+sudo: required
+dist: trusty
+
+addons:
+  apt:
+    packages:
+      - build-essential
+      - libglib2.0-dev
+      - libjson-glib-dev
+      - libxen-dev
+      - libxc-dev
+      - libxenstore3.0
+      - bison
+      - libbison-dev
+      - flex
+      - git
+      - python
+      - python-pip
+
+before_install:
+  - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
+  - cd $HOME/libvmi && $HOME/libvmi/autogen.sh
+  - cd $HOME/libvmi && $HOME/libvmi/configure --disable-kvm
+  - cd $HOME/libvmi && make
+  - cd $HOME/libvmi && sudo make install
+  - sudo pip install rekall-core rekall
+
+matrix:
+  include:
+
+    - os: linux
+      env:
+        - TEST="Make"
+      script:
+        - cd $TRAVIS_BUILD_DIR
+        - make
+        - make tools
+        - make debug
+
+    - os: linux
+      env:
+        - TEST="Astyle"
+      script:
+        - cd $TRAVIS_BUILD_DIR
+        - if [[ -n $(./tools/astyle/run.sh | grep Formatted) ]]; then echo "You must run astyle before submitting a pull request"; exit -1; fi

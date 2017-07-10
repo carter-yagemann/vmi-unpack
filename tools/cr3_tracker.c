@@ -35,11 +35,13 @@ char *domain_name;
 /* Signal handler */
 static int interrupted = 0;
 static struct sigaction action;
-static void close_handler(int sig) {
+static void close_handler(int sig)
+{
     interrupted = sig;
 }
 
-event_response_t monitor_cr3(vmi_instance_t vmi, vmi_event_t *event) {
+event_response_t monitor_cr3(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     vmi_pid_t parent_pid = vmi_current_parent_pid(vmi, event);
@@ -55,12 +57,14 @@ event_response_t monitor_cr3(vmi_instance_t vmi, vmi_event_t *event) {
  * Monitors the CR3 register in each VCPU and prints the current process'
  * PID and name.
  */
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
     domain_name = NULL;
     char *rekall = NULL;
 
-    if (argc < 3) {
+    if (argc < 3)
+    {
         printf("Usage: %s <domain_name> <rekall_profile>\n", argv[0]);
         return EXIT_FAILURE;
     }
@@ -80,9 +84,11 @@ int main(int argc, char *argv[]) {
     // Initialize libVMI
     vmi_instance_t vmi;
     if (vmi_init_complete(&vmi, domain_name, VMI_INIT_DOMAINNAME | VMI_INIT_EVENTS, NULL,
-            VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE) {
+                          VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE)
+    {
         fprintf(stderr, "ERROR: libVMI - Failed to initialize libVMI.\n");
-        if (vmi != NULL) {
+        if (vmi != NULL)
+        {
             vmi_destroy(vmi);
         }
         return EXIT_FAILURE;
@@ -92,7 +98,8 @@ int main(int argc, char *argv[]) {
 
     // Initialize various helper methods
     vmi_pause_vm(vmi);
-    if (!process_vmi_init(vmi, rekall)) {
+    if (!process_vmi_init(vmi, rekall))
+    {
         fprintf(stderr, "ERROR: CR3 Tracker - Failed to initialize process VMI\n");
         vmi_destroy(vmi);
         return EXIT_FAILURE;
@@ -102,9 +109,11 @@ int main(int argc, char *argv[]) {
 
     // Main loop
     status_t status;
-    while (!interrupted) {
+    while (!interrupted)
+    {
         status = vmi_events_listen(vmi, 500);
-        if (status != VMI_SUCCESS) {
+        if (status != VMI_SUCCESS)
+        {
             fprintf(stderr, "ERROR: libVMI - Unexpected error while waiting for VMI events, quitting.\n");
             interrupted = 1;
         }

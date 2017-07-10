@@ -1,3 +1,5 @@
+#!/bin/bash
+#
 # Copyright (c) 2017 Carter Yagemann
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,28 +20,27 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-main:
-	mkdir -p bin
-	gcc src/*.c src/process/*.c -Wall -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+set -e
 
-debug:
-	mkdir -p bin
-	gcc src/*.c src/process/*.c -Wall -g -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+ASTYLE=./tools/astyle/astyle/build/gcc/bin/astyle
 
-.PHONY: tools
+if [ ! -f $ASTYLE ]; then
 
-tools:
-	mkdir -p bin
-	gcc tools/vmi_table_walk.c -Wall -I include -o bin/vmi-table-walk `pkg-config --cflags --libs libvmi`
-	gcc tools/table_monitor.c src/monitor.c -Wall -I include -o bin/table-monitor `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
-	gcc tools/rekall_linux.c src/rekall_parser.c -Wall -I include -o bin/rekall-linux `pkg-config --cflags --libs json-glib-1.0`
-	gcc tools/rekall_windows.c src/rekall_parser.c -Wall -I include -o bin/rekall-windows `pkg-config --cflags --libs json-glib-1.0`
-	gcc tools/cr3_tracker.c src/rekall_parser.c src/process/*.c -Wall -I include -o bin/cr3-tracker `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+	pushd ./tools/astyle/
+	rm -Rf astyle
 
-.PHONY: astyle
+	tar xvf astyle.tar.gz
+	cd astyle/build/gcc
 
-astyle:
-	tools/astyle/run.sh
+	make -j
 
-clean:
-	rm -f bin/*
+	popd
+fi
+
+find src/ -name "*.c" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+find src/ -name "*.h" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+
+find include/ -name "*.c" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+find include/ -name "*.h" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+
+find tools/*.c -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;

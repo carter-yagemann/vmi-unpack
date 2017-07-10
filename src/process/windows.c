@@ -27,13 +27,15 @@
 
 #include <vmi/process.h>
 
-addr_t vmi_current_thread_windows(vmi_instance_t vmi, vmi_event_t *event) {
+addr_t vmi_current_thread_windows(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     addr_t thread;
     addr_t prcb;
     addr_t currentthread;
 
-    if (vmi_get_page_mode(vmi, event->vcpu_id) != VMI_PM_IA32E) {
+    if (vmi_get_page_mode(vmi, event->vcpu_id) != VMI_PM_IA32E)
+    {
         fprintf(stderr, "ERROR: Windows Process VMI - Only IA-32E is currently supported\n");
         return 0;
     }
@@ -47,7 +49,8 @@ addr_t vmi_current_thread_windows(vmi_instance_t vmi, vmi_event_t *event) {
     return thread;
 }
 
-addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event) {
+addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     addr_t process;
     addr_t thread = vmi_current_thread_windows(vmi, event);
@@ -62,9 +65,11 @@ addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event) {
     return process;
 }
 
-vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event) {
+vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event)
+{
 
-    if (!process_vmi_ready) {
+    if (!process_vmi_ready)
+    {
         fprintf(stderr, "ERROR: Windows Process VMI - Not initialized\n");
         return 0;
     }
@@ -82,9 +87,11 @@ vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event) {
     return pid;
 }
 
-char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event) {
+char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event)
+{
 
-    if (!process_vmi_ready) {
+    if (!process_vmi_ready)
+    {
         fprintf(stderr, "ERROR: Windows Process VMI - Not initialized\n");
         return NULL;
     }
@@ -99,9 +106,11 @@ char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event) {
     return vmi_read_str_va(vmi, eprocess_pname, 0);
 }
 
-vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event) {
+vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event)
+{
 
-    if (!process_vmi_ready) {
+    if (!process_vmi_ready)
+    {
         fprintf(stderr, "ERROR: Windows Process VMI - Not initialized\n");
         return 0;
     }

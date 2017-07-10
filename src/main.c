@@ -41,18 +41,21 @@ uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
 /* Signal handler */
 static int interrupted = 0;
 static struct sigaction action;
-static void close_handler(int sig) {
+static void close_handler(int sig)
+{
     interrupted = sig;
 }
 
 /**
  * Callback that's invoked when a process tries to write then execute.
  */
-void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat) {
+void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
+{
 
     uint64_t page_size;
 
-    switch(page_cat) {
+    switch (page_cat)
+    {
         case PAGE_CAT_4KB_FRAME:
             page_size = 0x1000;
             break;
@@ -67,7 +70,8 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t pa
             break;
     }
 
-    if (!page_size) {
+    if (!page_size)
+    {
         fprintf(stderr, "ERROR: Unpack - Unknown page size\n");
         return;
     }
@@ -75,13 +79,14 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t pa
     // Extract the W2X page from the guest VM
     addr_t paddr = (event->mem_event.gfn << 12) + event->mem_event.offset;
     uint64_t dump_size = page_size - event->mem_event.offset;
-    char * buffer = (char *) malloc(dump_size); // TODO - Cache allocate page sizes for better performance
+    char *buffer = (char *) malloc(dump_size);  // TODO - Cache allocate page sizes for better performance
     vmi_read_pa(vmi, paddr, (void *) buffer, dump_size);
 
     add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip);
 }
 
-void usage(char *name) {
+void usage(char *name)
+{
 
     printf("%s [options]\n", name);
     printf("\n");
@@ -98,10 +103,12 @@ void usage(char *name) {
     printf("    -f                       also follow children created by target process\n");
 }
 
-event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event) {
+event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
-    if (pid == process_pid) {
+    if (pid == process_pid)
+    {
         monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
         monitor_remove_cr3(monitor_pid);
     }
@@ -109,10 +116,12 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event) {
     return VMI_EVENT_RESPONSE_NONE;
 }
 
-event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event) {
+event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     char *name = vmi_current_name(vmi, event);
-    if (!strncmp(name, process_name, strlen(name))) {
+    if (!strncmp(name, process_name, strlen(name)))
+    {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
         monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
         monitor_remove_cr3(monitor_name);
@@ -124,7 +133,8 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event) {
 /**
  * Monitors a process' page table.
  */
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
     domain_name = NULL;
     char *rekall = NULL;
@@ -134,8 +144,10 @@ int main(int argc, char *argv[]) {
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:o:p:n:f")) != -1) {
-        switch (c) {
+    while ((c = getopt(argc, argv, "d:r:o:p:n:f")) != -1)
+    {
+        switch (c)
+        {
             case 'd':
                 domain_name = optarg;
                 break;
@@ -161,7 +173,8 @@ int main(int argc, char *argv[]) {
     }
 
     if (domain_name == NULL || rekall == NULL || output_dir == NULL ||
-            (process_pid == 0 && process_name == NULL)) {
+        (process_pid == 0 && process_name == NULL))
+    {
         usage(argv[0]);
         return EXIT_FAILURE;
     }
@@ -178,29 +191,36 @@ int main(int argc, char *argv[]) {
     // Initialize libVMI
     vmi_instance_t vmi;
     if (vmi_init_complete(&vmi, domain_name, VMI_INIT_DOMAINNAME | VMI_INIT_EVENTS, NULL,
-            VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE) {
+                          VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE)
+    {
         fprintf(stderr, "ERROR: libVMI - Failed to initialize libVMI.\n");
-        if (vmi != NULL) {
+        if (vmi != NULL)
+        {
             vmi_destroy(vmi);
         }
         return EXIT_FAILURE;
     }
 
-    if (monitor_init(vmi)) {
+    if (monitor_init(vmi))
+    {
         fprintf(stderr, "ERROR: Unpack - Failed to initialize monitor\n");
         vmi_destroy(vmi);
         return EXIT_FAILURE;
     }
 
-    if (process_name != NULL) {
+    if (process_name != NULL)
+    {
         monitor_add_cr3(monitor_name);
-    } else if (process_pid > 0) {
+    }
+    else if (process_pid > 0)
+    {
         monitor_add_cr3(monitor_pid);
     }
 
     // Initialize various helper methods
     start_dump_thread(output_dir);
-    if (!process_vmi_init(vmi, rekall)) {
+    if (!process_vmi_init(vmi, rekall))
+    {
         fprintf(stderr, "ERROR: Unpack - Failed to initialize process VMI\n");
         monitor_destroy(vmi);
         vmi_destroy(vmi);
@@ -210,9 +230,11 @@ int main(int argc, char *argv[]) {
 
     // Main loop
     status_t status;
-    while (!interrupted) {
+    while (!interrupted)
+    {
         status = vmi_events_listen(vmi, 500);
-        if (status != VMI_SUCCESS) {
+        if (status != VMI_SUCCESS)
+        {
             fprintf(stderr, "ERROR: libVMI - Unexpected error while waiting for VMI events, quitting.\n");
             interrupted = 1;
         }

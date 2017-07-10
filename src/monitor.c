@@ -35,7 +35,8 @@
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
 
-void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access, vmi_pid_t pid, page_cat_t cat) {
+void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access, vmi_pid_t pid, page_cat_t cat)
+{
 
     if (g_hash_table_contains(trapped_pages, &paddr))
         return;
@@ -52,7 +53,8 @@ void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access,
     g_hash_table_insert(page_p2pid, key, value);
 }
 
-void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid) {
+void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid)
+{
 
     unsigned index;
     addr_t entry_addr;
@@ -61,12 +63,14 @@ void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid) {
 
     monitor_set_trap(vmi, pt, VMI_MEMACCESS_W, pid, PAGE_CAT_PT);
 
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pt + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
             continue;
-        if (PAGING_INTEL_64_IS_WRITABLE(entry_val) && PAGING_INTEL_64_IS_USERMODE(entry_val)) {
+        if (PAGING_INTEL_64_IS_WRITABLE(entry_val) && PAGING_INTEL_64_IS_USERMODE(entry_val))
+        {
             next_addr = PAGING_INTEL_64_GET_4KB_FRAME_PADDR(entry_val);
             if (next_addr <= max_paddr)
                 monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_4KB_FRAME);
@@ -75,7 +79,8 @@ void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid) {
     }
 }
 
-void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid) {
+void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid)
+{
 
     unsigned index;
     addr_t entry_addr;
@@ -84,19 +89,22 @@ void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid) {
 
     monitor_set_trap(vmi, pd, VMI_MEMACCESS_W, pid, PAGE_CAT_PD);
 
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pd + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
             continue;
         if (PAGING_INTEL_64_IS_FRAME_PTR(entry_val) && PAGING_INTEL_64_IS_WRITABLE(entry_val)
-                && PAGING_INTEL_64_IS_USERMODE(entry_val)) {
+            && PAGING_INTEL_64_IS_USERMODE(entry_val))
+        {
             next_addr = PAGING_INTEL_64_GET_2MB_FRAME_PADDR(entry_val);
             if (next_addr <= max_paddr)
                 monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_2MB_FRAME);
             continue;
         }
-        if (!PAGING_INTEL_64_IS_FRAME_PTR(entry_val)) {
+        if (!PAGING_INTEL_64_IS_FRAME_PTR(entry_val))
+        {
             next_addr = PAGING_INTEL_64_GET_PT_PADDR(entry_val);
             if (next_addr <= max_paddr)
                 monitor_trap_pt(vmi, next_addr, pid);
@@ -105,7 +113,8 @@ void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid) {
     }
 }
 
-void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid) {
+void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid)
+{
 
     unsigned index;
     addr_t entry_addr;
@@ -114,19 +123,22 @@ void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid) {
 
     monitor_set_trap(vmi, pdpt, VMI_MEMACCESS_W, pid, PAGE_CAT_PDPT);
 
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pdpt + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
             continue;
         if (PAGING_INTEL_64_IS_FRAME_PTR(entry_val) && PAGING_INTEL_64_IS_WRITABLE(entry_val)
-                && PAGING_INTEL_64_IS_USERMODE(entry_val)) {
+            && PAGING_INTEL_64_IS_USERMODE(entry_val))
+        {
             next_addr = PAGING_INTEL_64_GET_1GB_FRAME_PADDR(entry_val);
             if (next_addr <= max_paddr)
                 monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_1GB_FRAME);
             continue;
         }
-        if (!PAGING_INTEL_64_IS_FRAME_PTR(entry_val)) {
+        if (!PAGING_INTEL_64_IS_FRAME_PTR(entry_val))
+        {
             next_addr = PAGING_INTEL_64_GET_PD_PADDR(entry_val);
             if (next_addr <= max_paddr)
                 monitor_trap_pd(vmi, next_addr, pid);
@@ -135,7 +147,8 @@ void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid) {
     }
 }
 
-void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid) {
+void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid)
+{
 
     unsigned index;
     addr_t entry_addr;
@@ -144,7 +157,8 @@ void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid) {
 
     monitor_set_trap(vmi, pml4, VMI_MEMACCESS_W, pid, PAGE_CAT_PML4);
 
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pml4 + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
@@ -155,18 +169,21 @@ void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid) {
     }
 }
 
-void monitor_trap_table(vmi_instance_t vmi, int pid) {
+void monitor_trap_table(vmi_instance_t vmi, int pid)
+{
 
     addr_t dtb;
 
-    if (pid == 0) {
+    if (pid == 0)
+    {
         fprintf(stderr, "ERROR: Monitor - Trapping PID 0 is not allowed\n");
         return;
     }
 
     dtb = vmi_pid_to_dtb(vmi, (vmi_pid_t) pid);
 
-    if (dtb == 0) {
+    if (dtb == 0)
+    {
         fprintf(stderr, "ERROR: Monitor - Failed to find DTB for PID %d\n", pid);
         return;
     }
@@ -174,7 +191,8 @@ void monitor_trap_table(vmi_instance_t vmi, int pid) {
     monitor_trap_pml4(vmi, PAGING_INTEL_64_GET_PML4_PADDR(dtb), pid);
 }
 
-void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat) {
+void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat)
+{
 
     pending_rescan_t *pending = (pending_rescan_t *) malloc(sizeof(pending_rescan_t));
     pending->paddr = paddr;
@@ -184,12 +202,14 @@ void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat) {
     pending_page_rescan = g_slist_prepend(pending_page_rescan, pending);
 }
 
-void process_pending_rescan(gpointer data, gpointer user_data) {
+void process_pending_rescan(gpointer data, gpointer user_data)
+{
 
     pending_rescan_t *rescan = (pending_rescan_t *) data;
 
     const page_cat_t cat = rescan->cat;
-    switch (cat) {
+    switch (cat)
+    {
         case PAGE_CAT_PML4:
             monitor_trap_pml4(monitor_vmi, rescan->paddr, rescan->pid);
             break;
@@ -211,12 +231,14 @@ void process_pending_rescan(gpointer data, gpointer user_data) {
     pending_page_rescan = g_slist_remove(pending_page_rescan, data);
 }
 
-void cr3_callback_dispatcher(gpointer cb, gpointer event) {
+void cr3_callback_dispatcher(gpointer cb, gpointer event)
+{
 
     ((event_callback_t)cb)(monitor_vmi, event);
 }
 
-event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event) {
+event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     // If there are any registered callbacks, invoke them
     g_slist_foreach(cr3_callbacks, cr3_callback_dispatcher, event);
@@ -224,11 +246,13 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event) {
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     page_cb_event_t *cb_event = (page_cb_event_t *) g_hash_table_lookup(page_cb_events, &pid);
 
-    if (cb_event != NULL) {
+    if (cb_event != NULL)
+    {
         // Check if process' page table has been replaced (e.g. execve). If it has and the callback
         // wants to follow remappings, the callback has to be registered again. Otherwise, remove
         // the callback because it's no longer valid.
-        if (cb_event->cr3 != event->x86_regs->cr3) {
+        if (cb_event->cr3 != event->x86_regs->cr3)
+        {
             page_table_monitor_cb_t cb = cb_event->cb;
             uint8_t cb_flags = cb_event->flags;
             monitor_remove_page_table(vmi, pid);
@@ -245,7 +269,8 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event) {
     vmi_pid_t parent_pid = vmi_current_parent_pid(vmi, event);
     page_cb_event_t *parent_cb_event = (page_cb_event_t *) g_hash_table_lookup(page_cb_events, &parent_pid);
 
-    if (parent_cb_event != NULL && (parent_cb_event->flags & MONITOR_FOLLOW_CHILDREN)) {
+    if (parent_cb_event != NULL && (parent_cb_event->flags & MONITOR_FOLLOW_CHILDREN))
+    {
         monitor_add_page_table(vmi, pid, parent_cb_event->cb, parent_cb_event->flags);
         return VMI_EVENT_RESPONSE_NONE;
     }
@@ -253,18 +278,21 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event) {
     return VMI_EVENT_RESPONSE_NONE;
 }
 
-event_response_t monitor_handler_ss(vmi_instance_t vmi, vmi_event_t *event) {
+event_response_t monitor_handler_ss(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     g_slist_foreach(pending_page_rescan, process_pending_rescan, NULL);
     return VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP;
 }
 
-event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event) {
+event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     addr_t paddr = PADDR_SHIFT(event->mem_event.gfn);
     vmi_pid_t *pid_ptr = (vmi_pid_t *) g_hash_table_lookup(page_p2pid, &paddr);
 
-    if (pid_ptr == NULL) {
+    if (pid_ptr == NULL)
+    {
         fprintf(stderr, "WARNING: Monitor - Failed to find PID for physical address 0x%lx\n", paddr);
         vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         return VMI_EVENT_RESPONSE_NONE;
@@ -275,8 +303,10 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event) {
     // If the PID of the current process is greater than the PID retrieved from page_p2pid,
     // most likely the page was freed and then claimed by the current process. In other
     // words, the page_p2pid value is stale.
-    if (curr_pid > *pid_ptr) {
-        if (g_hash_table_contains(page_cb_events, &curr_pid)) {
+    if (curr_pid > *pid_ptr)
+    {
+        if (g_hash_table_contains(page_cb_events, &curr_pid))
+        {
             addr_t *new_paddr = (addr_t *) malloc(sizeof(addr_t));
             *new_paddr = paddr;
 
@@ -287,7 +317,9 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event) {
 
             *pid_ptr = curr_pid;
 
-        } else {
+        }
+        else
+        {
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
             return VMI_EVENT_RESPONSE_NONE;
         }
@@ -295,7 +327,8 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event) {
 
     page_cb_event_t *cb_event = (page_cb_event_t *) g_hash_table_lookup(page_cb_events, pid_ptr);
 
-    if (cb_event == NULL) {
+    if (cb_event == NULL)
+    {
         fprintf(stderr, "WARNING: Monitor - Failed to find callback event for PID %d\n", *pid_ptr);
         vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         return VMI_EVENT_RESPONSE_NONE;
@@ -303,32 +336,43 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event) {
 
     page_cat_t *cat_ptr = (page_cat_t *) g_hash_table_lookup(trapped_pages, &paddr);
 
-    if (cat_ptr == NULL) {
+    if (cat_ptr == NULL)
+    {
         fprintf(stderr, "WARNING: Monitor - Failed to lookup page category for physical address 0x%lx\n", paddr);
         vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         return VMI_EVENT_RESPONSE_NONE;
     }
 
-    if (*cat_ptr == PAGE_CAT_4KB_FRAME || *cat_ptr == PAGE_CAT_2MB_FRAME || *cat_ptr == PAGE_CAT_1GB_FRAME) {
-        if (event->mem_event.out_access & VMI_MEMACCESS_X) {
+    if (*cat_ptr == PAGE_CAT_4KB_FRAME || *cat_ptr == PAGE_CAT_2MB_FRAME || *cat_ptr == PAGE_CAT_1GB_FRAME)
+    {
+        if (event->mem_event.out_access & VMI_MEMACCESS_X)
+        {
             cb_event->cb(vmi, event, *pid_ptr, *cat_ptr);
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_W, 0);
-        } else if (event->mem_event.out_access & VMI_MEMACCESS_W) {
+        }
+        else if (event->mem_event.out_access & VMI_MEMACCESS_W)
+        {
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);
-        } else {
+        }
+        else
+        {
             fprintf(stderr, "WARNING: Monitor - Caught unexpected memory access %d\n", event->mem_event.out_access);
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         }
         return VMI_EVENT_RESPONSE_NONE;
-    } else { // page in process's page table
+    }
+    else     // page in process's page table
+    {
         queue_pending_rescan(paddr, *pid_ptr, *cat_ptr);
         return (VMI_EVENT_RESPONSE_EMULATE | VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP);
     }
 }
 
-int monitor_init(vmi_instance_t vmi) {
+int monitor_init(vmi_instance_t vmi)
+{
 
-    if (vmi_get_page_mode(vmi, 0) != VMI_PM_IA32E) {
+    if (vmi_get_page_mode(vmi, 0) != VMI_PM_IA32E)
+    {
         fprintf(stderr, "ERROR: Monitor - Only IA-32e paging is supported at this time\n");
         page_table_monitor_init = 0;
         return 1;
@@ -341,7 +385,8 @@ int monitor_init(vmi_instance_t vmi) {
     cr3_callbacks = NULL;
 
     SETUP_MEM_EVENT(&page_table_monitor_event, 0, VMI_MEMACCESS_WX, monitor_handler, 1);
-    if (vmi_register_event(vmi, &page_table_monitor_event) != VMI_SUCCESS) {
+    if (vmi_register_event(vmi, &page_table_monitor_event) != VMI_SUCCESS)
+    {
         fprintf(stderr, "ERROR: Monitor - Failed to register page table event\n");
         page_table_monitor_init = 0;
         return 1;
@@ -349,7 +394,8 @@ int monitor_init(vmi_instance_t vmi) {
 
     uint32_t vcpu_mask = (1U << vmi_get_num_vcpus(vmi)) - 1;
     SETUP_SINGLESTEP_EVENT(&page_table_monitor_ss, vcpu_mask, monitor_handler_ss, 1);
-    if (vmi_register_event(vmi, &page_table_monitor_ss) != VMI_SUCCESS) {
+    if (vmi_register_event(vmi, &page_table_monitor_ss) != VMI_SUCCESS)
+    {
         fprintf(stderr, "ERROR: Monitor - Failed to register single step event\n");
         vmi_clear_event(vmi, &page_table_monitor_event, NULL);
         page_table_monitor_init = 0;
@@ -357,7 +403,8 @@ int monitor_init(vmi_instance_t vmi) {
     }
 
     SETUP_REG_EVENT(&page_table_monitor_cr3, CR3, VMI_REGACCESS_W, 0, monitor_handler_cr3);
-    if (vmi_register_event(vmi, &page_table_monitor_cr3) != VMI_SUCCESS) {
+    if (vmi_register_event(vmi, &page_table_monitor_cr3) != VMI_SUCCESS)
+    {
         fprintf(stderr, "ERROR: Monitor - Failed to register CR3 monitoring event\n");
         vmi_clear_event(vmi, &page_table_monitor_event, NULL);
         vmi_clear_event(vmi, &page_table_monitor_ss, NULL);
@@ -373,7 +420,8 @@ int monitor_init(vmi_instance_t vmi) {
     return 0;
 }
 
-void monitor_destroy(vmi_instance_t vmi) {
+void monitor_destroy(vmi_instance_t vmi)
+{
 
     if (!page_table_monitor_init)
         return;
@@ -389,19 +437,23 @@ void monitor_destroy(vmi_instance_t vmi) {
     page_table_monitor_init = 0;
 }
 
-void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags) {
+void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags)
+{
 
-    if (cb == NULL) {
+    if (cb == NULL)
+    {
         fprintf(stderr, "ERROR: Monitor - Must specify callback function, cannot be null.\n");
         return;
     }
 
-    if (!page_table_monitor_init) {
+    if (!page_table_monitor_init)
+    {
         fprintf(stderr, "ERROR: Monitor - Not initialized, cannot add page table\n");
         return;
     }
 
-    if (g_hash_table_contains(page_cb_events, &pid)) {
+    if (g_hash_table_contains(page_cb_events, &pid))
+    {
         fprintf(stderr, "ERROR: Monitor - Callback already registered for PID %d\n", pid);
         return;
     }
@@ -419,9 +471,11 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     g_hash_table_insert(page_cb_events, cb_event_key, cb_event);
 }
 
-void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid) {
+void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
+{
 
-    if (!page_table_monitor_init) {
+    if (!page_table_monitor_init)
+    {
         fprintf(stderr, "ERROR: Monitor - Not initialized, cannot remove page table\n");
         return;
     }
@@ -432,12 +486,14 @@ void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid) {
     g_hash_table_remove(page_cb_events, &pid);
 }
 
-void monitor_add_cr3(event_callback_t cb) {
+void monitor_add_cr3(event_callback_t cb)
+{
 
     cr3_callbacks = g_slist_prepend(cr3_callbacks, cb);
 }
 
-void monitor_remove_cr3(event_callback_t cb) {
+void monitor_remove_cr3(event_callback_t cb)
+{
 
     cr3_callbacks = g_slist_remove(cr3_callbacks, cb);
 }

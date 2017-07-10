@@ -41,7 +41,8 @@ GHashTable *trapped_pages;   // key: addr_t, value: uint8_t (page type)
 GSList *pending_page_rescan; // queue of table rescans
 GSList *cr3_callbacks;       // list of CR3 write callbacks
 
-typedef enum {
+typedef enum
+{
     PAGE_CAT_PML4,
     PAGE_CAT_PDPT,
     PAGE_CAT_PD,
@@ -52,15 +53,17 @@ typedef enum {
 } page_cat_t;
 
 // args: vmi, event, pid, page category
-typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t*, vmi_pid_t, page_cat_t);
+typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t *, vmi_pid_t, page_cat_t);
 
-typedef struct {
+typedef struct
+{
     addr_t paddr;
     vmi_pid_t pid;
     page_cat_t cat;
 } pending_rescan_t;
 
-typedef struct {
+typedef struct
+{
     vmi_pid_t pid;
     reg_t cr3;
     uint8_t flags;

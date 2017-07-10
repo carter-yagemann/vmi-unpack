@@ -1,5 +1,7 @@
 # VMI-Unpack
 
+[![Build Status](https://travis-ci.org/carter-yagemann/vmi-unpack.svg?branch=master)](https://travis-ci.org/carter-yagemann/vmi-unpack)
+
 ## About
 
 VMI-Unpack is a virtual machine introspection (VMI) based generic unpacker. Its

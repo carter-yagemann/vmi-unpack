@@ -28,7 +28,8 @@
 #include <glib-object.h>
 #include <json-glib/json-glib.h>
 
-typedef struct {
+typedef struct
+{
     gint64 kpcr_prcb;
     gint64 kprcb_currentthread;
     gint64 kthread_process;
@@ -37,7 +38,8 @@ typedef struct {
     gint64 eprocess_parent_pid;
 } windows_rekall_t;
 
-typedef struct {
+typedef struct
+{
     gint64 current_task;
     gint64 task_struct_comm;
     gint64 task_struct_pid;

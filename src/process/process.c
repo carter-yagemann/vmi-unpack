@@ -27,9 +27,11 @@
 #include <rekall_parser.h>
 #include <vmi/process.h>
 
-bool process_vmi_init_linux(char *rekall_filepath) {
+bool process_vmi_init_linux(char *rekall_filepath)
+{
 
-    if (!parse_rekall_linux(&process_vmi_linux_rekall, rekall_filepath)) {
+    if (!parse_rekall_linux(&process_vmi_linux_rekall, rekall_filepath))
+    {
         fprintf(stderr, "ERROR: Process VMI - Failed to initialize Linux\n");
         return 0;
     }
@@ -42,9 +44,11 @@ bool process_vmi_init_linux(char *rekall_filepath) {
     return 1;
 }
 
-bool process_vmi_init_windows(char *rekall_filepath) {
+bool process_vmi_init_windows(char *rekall_filepath)
+{
 
-    if (!parse_rekall_windows(&process_vmi_windows_rekall, rekall_filepath)) {
+    if (!parse_rekall_windows(&process_vmi_windows_rekall, rekall_filepath))
+    {
         fprintf(stderr, "ERROR: Process VMI - Failed to initialize Linux\n");
         return 0;
     }
@@ -57,12 +61,14 @@ bool process_vmi_init_windows(char *rekall_filepath) {
     return 1;
 }
 
-bool process_vmi_init(vmi_instance_t vmi, char *rekall_filepath) {
+bool process_vmi_init(vmi_instance_t vmi, char *rekall_filepath)
+{
 
     process_vmi_ready = 0;
 
     const os_t os = vmi_get_ostype(vmi);
-    switch(os) {
+    switch (os)
+    {
         case VMI_OS_WINDOWS:
             return process_vmi_init_windows(rekall_filepath);
         case VMI_OS_LINUX:
@@ -74,7 +80,8 @@ bool process_vmi_init(vmi_instance_t vmi, char *rekall_filepath) {
     }
 }
 
-void process_vmi_destroy() {
+void process_vmi_destroy()
+{
 
     process_vmi_ready = 0;
 }

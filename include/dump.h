@@ -35,7 +35,8 @@ sem_t dump_sem;
 GQueue *dump_queue;
 GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 
-typedef struct {
+typedef struct
+{
     vmi_pid_t pid;
     reg_t rip;
     char *buff;
