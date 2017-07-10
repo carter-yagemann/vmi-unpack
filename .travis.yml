@@ -9,6 +9,7 @@ addons:
       - build-essential
       - libglib2.0-dev
       - libjson-glib-dev
+      - libxen-dev
       - libxc-dev
       - libxenstore3.0
       - bison
