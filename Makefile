@@ -22,6 +22,10 @@ main:
 	mkdir -p bin
 	gcc src/*.c src/process/*.c -Wall -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
 
+debug:
+	mkdir -p bin
+	gcc src/*.c src/process/*.c -Wall -g -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+
 .PHONY: tools
 
 tools:

@@ -37,6 +37,7 @@ vmi_event_t page_table_monitor_ss;
 vmi_event_t page_table_monitor_cr3;
 GHashTable *page_cb_events;  // key: vmi_pid_t, value: page_cb_event_t
 GHashTable *page_p2pid;      // key: addr_t (4KB aligned), value: vmi_pid_t
+GHashTable *trapped_pages;   // key: addr_t, value: uint8_t (page type)
 GSList *pending_page_rescan; // queue of table rescans
 GSList *cr3_callbacks;       // list of CR3 write callbacks
 
@@ -55,7 +56,6 @@ typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t*, vmi_pid_t,
 
 typedef struct {
     addr_t paddr;
-    GHashTable *cb_table;
     vmi_pid_t pid;
     page_cat_t cat;
 } pending_rescan_t;
@@ -65,7 +65,6 @@ typedef struct {
     reg_t cr3;
     uint8_t flags;
     page_table_monitor_cb_t cb;
-    GHashTable *trapped_pages; // key: addr_t, value: uint8_t (page type)
 } page_cb_event_t;
 
 /**
