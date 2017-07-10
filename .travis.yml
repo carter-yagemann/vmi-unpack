@@ -34,7 +34,8 @@ matrix:
       env:
         - TEST="Make"
       script:
-        - cd $TRAVIS_BUILD_DIR && make
+        - cd $TRAVIS_BUILD_DIR
+        - make
         - make tools
         - make debug
 
@@ -42,4 +43,5 @@ matrix:
       env:
         - TEST="Astyle"
       script:
+        - cd $TRAVIS_BUILD_DIR
         - if [[ -n $(./tools/astyle/run.sh | grep Formatted) ]]; then echo "You must run astyle before submitting a pull request"; exit -1; fi
