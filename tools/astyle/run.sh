@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+set -e
+
 ASTYLE=./tools/astyle/astyle/build/gcc/bin/astyle
 
 if [ ! -f $ASTYLE ]; then
