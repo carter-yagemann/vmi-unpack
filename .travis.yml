@@ -19,7 +19,7 @@ addons:
       - python
       - python-pip
 
-install:
+before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
   - cd $HOME/libvmi && $HOME/libvmi/autogen.sh
   - cd $HOME/libvmi && $HOME/libvmi/configure --disable-kvm
@@ -34,6 +34,6 @@ matrix:
       env:
         - TEST="Make"
       script:
-        - make
+        - cd $TRAVIS_BUILD_DIR && make
         - make tools
         - make debug
