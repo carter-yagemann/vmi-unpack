@@ -37,5 +37,10 @@ if [ ! -f $ASTYLE ]; then
 	popd
 fi
 
-find -name "*.h" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
-find -name "*.c" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+find src/ -name "*.c" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+find src/ -name "*.h" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+
+find include/ -name "*.c" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+find include/ -name "*.h" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+
+find tools/*.c -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
