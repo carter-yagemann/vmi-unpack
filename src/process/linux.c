@@ -31,21 +31,25 @@
 #define STACK_SIZE_16K 0x3fff
 #define MIN_KERNEL_BOUNDARY 0x80000000
 
-addr_t vmi_current_task_struct_linux(vmi_instance_t vmi, vmi_event_t *event) {
+addr_t vmi_current_task_struct_linux(vmi_instance_t vmi, vmi_event_t *event)
+{
 
     addr_t current_task = 0;
 
-    access_context_t ctx = {
+    access_context_t ctx =
+    {
         .translate_mechanism = VMI_TM_PROCESS_DTB,
         .dtb = event->x86_regs->cr3,
         .addr = event->x86_regs->gs_base + process_vmi_linux_rekall.current_task,
     };
 
     // First try reading the current_task pointer
-    if (vmi_read_addr(vmi, &ctx, &current_task) == VMI_FAILURE || current_task < MIN_KERNEL_BOUNDARY) {
+    if (vmi_read_addr(vmi, &ctx, &current_task) == VMI_FAILURE || current_task < MIN_KERNEL_BOUNDARY)
+    {
         // If that fails or returns nonsense, try reading kernel stack assuming it's size is 16KB
         ctx.addr = event->x86_regs->gs_base & ~STACK_SIZE_16K;
-        if (vmi_read_addr(vmi, &ctx, &current_task) == VMI_FAILURE || current_task < MIN_KERNEL_BOUNDARY) {
+        if (vmi_read_addr(vmi, &ctx, &current_task) == VMI_FAILURE || current_task < MIN_KERNEL_BOUNDARY)
+        {
             // If we still fail, try assuming the kernel stack size is 8KB
             ctx.addr = event->x86_regs->gs_base & ~STACK_SIZE_8K;
             if (vmi_read_addr(vmi, &ctx, &current_task) == VMI_FAILURE || current_task < MIN_KERNEL_BOUNDARY)
@@ -56,9 +60,11 @@ addr_t vmi_current_task_struct_linux(vmi_instance_t vmi, vmi_event_t *event) {
     return current_task;
 }
 
-vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event) {
+vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event)
+{
 
-    if (!process_vmi_ready) {
+    if (!process_vmi_ready)
+    {
         fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
         return 0;
     }
@@ -76,9 +82,11 @@ vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event) {
     return pid;
 }
 
-char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event) {
+char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event)
+{
 
-    if (!process_vmi_ready) {
+    if (!process_vmi_ready)
+    {
         fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
         return NULL;
     }
@@ -91,9 +99,11 @@ char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event) {
     return vmi_read_str_va(vmi, task_struct + process_vmi_linux_rekall.task_struct_comm, 0);
 }
 
-vmi_pid_t vmi_current_parent_pid_linux(vmi_instance_t vmi, vmi_event_t *event) {
+vmi_pid_t vmi_current_parent_pid_linux(vmi_instance_t vmi, vmi_event_t *event)
+{
 
-    if (!process_vmi_ready) {
+    if (!process_vmi_ready)
+    {
         fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
         return 0;
     }

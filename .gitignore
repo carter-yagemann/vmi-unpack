@@ -1,1 +1,4 @@
 /bin
+/tools/astyle/astyle
+/tools/astyle/.*
+*.swp

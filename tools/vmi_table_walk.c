@@ -27,13 +27,15 @@
 
 #include <paging/intel_64.h>
 
-void walk_pt(vmi_instance_t vmi, addr_t pt) {
+void walk_pt(vmi_instance_t vmi, addr_t pt)
+{
 
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
 
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pt + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
@@ -44,49 +46,60 @@ void walk_pt(vmi_instance_t vmi, addr_t pt) {
     }
 }
 
-void walk_pd(vmi_instance_t vmi, addr_t pd) {
+void walk_pd(vmi_instance_t vmi, addr_t pd)
+{
 
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
 
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pd + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
             continue;
         if (!PAGING_INTEL_64_IS_USERMODE(entry_val))
             continue;
-        if (PAGING_INTEL_64_IS_FRAME_PTR(entry_val)) {
+        if (PAGING_INTEL_64_IS_FRAME_PTR(entry_val))
+        {
             printf("2MB @paddr 0x%lx\n", PAGING_INTEL_64_GET_2MB_FRAME_PADDR(entry_addr));
-        } else {
+        }
+        else
+        {
             walk_pt(vmi, PAGING_INTEL_64_GET_PT_PADDR(entry_val));
         }
     }
 }
 
-void walk_pdpt(vmi_instance_t vmi, addr_t pdpt) {
+void walk_pdpt(vmi_instance_t vmi, addr_t pdpt)
+{
 
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
 
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pdpt + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
             continue;
         if (!PAGING_INTEL_64_IS_USERMODE(entry_val))
             continue;
-        if (PAGING_INTEL_64_IS_FRAME_PTR(entry_val)) {
+        if (PAGING_INTEL_64_IS_FRAME_PTR(entry_val))
+        {
             printf("1GB @paddr 0x%lx\n", PAGING_INTEL_64_GET_1GB_FRAME_PADDR(entry_addr));
-        } else {
+        }
+        else
+        {
             walk_pd(vmi, PAGING_INTEL_64_GET_PD_PADDR(entry_val));
         }
     }
 }
 
-void walk_pml4(vmi_instance_t vmi, int pid) {
+void walk_pml4(vmi_instance_t vmi, int pid)
+{
 
     addr_t dtb;
     uint64_t pml4;
@@ -98,7 +111,8 @@ void walk_pml4(vmi_instance_t vmi, int pid) {
 
     // PML4
     pml4 = PAGING_INTEL_64_GET_PML4_PADDR(dtb);
-    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++) {
+    for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
+    {
         entry_addr = pml4 + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (PAGING_INTEL_64_IS_PRESENT(entry_val) && !PAGING_INTEL_64_IS_FRAME_PTR(entry_val))
@@ -110,9 +124,11 @@ void walk_pml4(vmi_instance_t vmi, int pid) {
  * Walks the page table for a given process in a given guest VM and prints out
  * the mapped physical addresses that belong to user mode.
  */
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
-    if (argc < 3) {
+    if (argc < 3)
+    {
         printf("%s <domain_name> <pid>\n", argv[0]);
         return EXIT_FAILURE;
     }
@@ -120,9 +136,11 @@ int main(int argc, char *argv[]) {
     // Initialize libVMI
     vmi_instance_t vmi;
     if (vmi_init_complete(&vmi, argv[1], VMI_INIT_DOMAINNAME, NULL,
-            VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE) {
+                          VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE)
+    {
         printf("ERROR: Failed to initialize libVMI.\n");
-        if (vmi != NULL) {
+        if (vmi != NULL)
+        {
             vmi_destroy(vmi);
         }
         return EXIT_FAILURE;

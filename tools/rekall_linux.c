@@ -25,20 +25,25 @@
 
 #include <rekall_parser.h>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
-    if (argc < 2) {
+    if (argc < 2)
+    {
         printf("%s <json_file>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     linux_rekall_t rekall;
-    if (!parse_rekall_linux(&rekall, argv[1])) {
+    if (!parse_rekall_linux(&rekall, argv[1]))
+    {
         printf("Failed to parse rekall file\n");
-    } else {
+    }
+    else
+    {
         printf("current_thread = %ld, comm = %ld, pid = %ld parent = %ld\n",
-                rekall.current_task, rekall.task_struct_comm, rekall.task_struct_pid,
-                rekall.task_struct_parent);
+               rekall.current_task, rekall.task_struct_comm, rekall.task_struct_pid,
+               rekall.task_struct_parent);
     }
 
     return EXIT_SUCCESS;

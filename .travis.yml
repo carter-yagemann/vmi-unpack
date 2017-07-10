@@ -37,3 +37,9 @@ matrix:
         - cd $TRAVIS_BUILD_DIR && make
         - make tools
         - make debug
+
+    - os: linux
+      env:
+        - TEST="Astyle"
+      script:
+        - if [[ -n $(./tools/astyle/run.sh | grep Formatted) ]]; then echo "You must run astyle before submitting a pull request"; exit -1; fi

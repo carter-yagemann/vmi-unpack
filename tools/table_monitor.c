@@ -31,14 +31,16 @@
 /* Signal handler */
 static int interrupted = 0;
 static struct sigaction action;
-static void close_handler(int sig) {
+static void close_handler(int sig)
+{
     interrupted = sig;
 }
 
 /**
  * Callback that's invoked when a process tries to write then execute.
  */
-void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t cat) {
+void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t cat)
+{
 
     printf("Caught write then execute! [EIP=0x%lx]\n", event->x86_regs->rip);
 }
@@ -46,9 +48,11 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t ca
 /**
  * Monitors a process' page table.
  */
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
-    if (argc < 3) {
+    if (argc < 3)
+    {
         printf("%s <domain_name> <pid>\n", argv[0]);
         return EXIT_FAILURE;
     }
@@ -65,9 +69,11 @@ int main(int argc, char *argv[]) {
     // Initialize libVMI
     vmi_instance_t vmi;
     if (vmi_init_complete(&vmi, argv[1], VMI_INIT_DOMAINNAME | VMI_INIT_EVENTS, NULL,
-            VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE) {
+                          VMI_CONFIG_GLOBAL_FILE_ENTRY, NULL, NULL) == VMI_FAILURE)
+    {
         printf("ERROR: Failed to initialize libVMI.\n");
-        if (vmi != NULL) {
+        if (vmi != NULL)
+        {
             vmi_destroy(vmi);
         }
         return EXIT_FAILURE;
@@ -80,9 +86,11 @@ int main(int argc, char *argv[]) {
 
     // Main loop
     status_t status;
-    while (!interrupted) {
+    while (!interrupted)
+    {
         status = vmi_events_listen(vmi, 500);
-        if (status != VMI_SUCCESS) {
+        if (status != VMI_SUCCESS)
+        {
             printf("ERROR: Unexpected error while waiting for VMI events, quitting.\n");
             interrupted = 1;
         }

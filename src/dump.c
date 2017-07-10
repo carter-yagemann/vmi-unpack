@@ -31,12 +31,14 @@
 
 #include <dump.h>
 
-char *gen_layer_filename(vmi_pid_t pid, reg_t rip) {
+char *gen_layer_filename(vmi_pid_t pid, reg_t rip)
+{
 
     uint64_t *layer_ptr;
     int dir_len = strlen(dump_output_dir);
 
-    if (!g_hash_table_contains(pid_layer, &pid)) {
+    if (!g_hash_table_contains(pid_layer, &pid))
+    {
         vmi_pid_t *pid_ptr = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
         *pid_ptr = pid;
         layer_ptr = (uint64_t *) malloc(sizeof(uint64_t));
@@ -55,18 +57,21 @@ char *gen_layer_filename(vmi_pid_t pid, reg_t rip) {
     return filename;
 }
 
-void *dump_worker_loop(void *data) {
+void *dump_worker_loop(void *data)
+{
 
     dump_layer_t *layer;
     FILE *ofile;
 
-    while (1) {
+    while (1)
+    {
 
         sem_wait(&dump_sem);
 
         layer = (dump_layer_t *) g_queue_pop_head(dump_queue);
 
-        if (layer->pid == 0 && layer->rip == 0 && layer->buff == NULL && layer->size == 0) {
+        if (layer->pid == 0 && layer->rip == 0 && layer->buff == NULL && layer->size == 0)
+        {
             free(layer);
             break; // signal to stop
         }
@@ -84,9 +89,11 @@ void *dump_worker_loop(void *data) {
     return NULL;
 }
 
-void start_dump_thread(char *dir) {
+void start_dump_thread(char *dir)
+{
 
-    if (dir == NULL) {
+    if (dir == NULL)
+    {
         fprintf(stderr, "ERROR: Dump Thread - Cannot start thread with an output dir of NULL\n");
         return;
     }
@@ -95,13 +102,15 @@ void start_dump_thread(char *dir) {
     dump_output_dir = (char *) malloc(strlen(dir) + 2);
     strcpy(dump_output_dir, dir);
     int tail = strlen(dump_output_dir);
-    if (dump_output_dir[tail - 1] != '/') {
+    if (dump_output_dir[tail - 1] != '/')
+    {
         dump_output_dir[tail] = '/';
         dump_output_dir[tail + 1] = '\0';
     }
 
     // Create semaphore, queue, and hashtable
-    if(sem_init(&dump_sem, 0, 0)) {
+    if (sem_init(&dump_sem, 0, 0))
+    {
         fprintf(stderr, "ERROR: Dump Thread - Failed to initialize semaphore\n");
         return;
     }
@@ -112,7 +121,8 @@ void start_dump_thread(char *dir) {
     pthread_create(&dump_worker, NULL, dump_worker_loop, NULL);
 }
 
-void stop_dump_thread() {
+void stop_dump_thread()
+{
 
     // Signal the worker that we're done by adding an empty item to its queue
     add_to_dump_queue(NULL, 0, 0, 0);
@@ -125,7 +135,8 @@ void stop_dump_thread() {
     g_hash_table_destroy(pid_layer);
 }
 
-void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip) {
+void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip)
+{
 
     dump_layer_t *layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
     layer->pid = pid;
