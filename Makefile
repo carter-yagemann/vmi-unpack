@@ -22,12 +22,16 @@ main:
 	mkdir -p bin
 	gcc src/*.c src/process/*.c -Wall -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
 
+debug:
+	mkdir -p bin
+	gcc src/*.c src/process/*.c -Wall -g -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+
 .PHONY: tools
 
 tools:
 	mkdir -p bin
 	gcc tools/vmi_table_walk.c -Wall -I include -o bin/vmi-table-walk `pkg-config --cflags --libs libvmi`
-	gcc tools/table_monitor.c src/monitor.c -Wall -I include -o bin/table-monitor `pkg-config --cflags --libs libvmi glib-2.0`
+	gcc tools/table_monitor.c src/monitor.c -Wall -I include -o bin/table-monitor `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
 	gcc tools/rekall_linux.c src/rekall_parser.c -Wall -I include -o bin/rekall-linux `pkg-config --cflags --libs json-glib-1.0`
 	gcc tools/rekall_windows.c src/rekall_parser.c -Wall -I include -o bin/rekall-windows `pkg-config --cflags --libs json-glib-1.0`
 	gcc tools/cr3_tracker.c src/rekall_parser.c src/process/*.c -Wall -I include -o bin/cr3-tracker `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`

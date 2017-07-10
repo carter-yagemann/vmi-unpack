@@ -64,8 +64,14 @@ vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event) {
     }
 
     addr_t task_struct = vmi_current_task_struct_linux(vmi, event);
+
+    if (!task_struct)
+        return 0;
+
     vmi_pid_t pid;
-    vmi_read_32_va(vmi, task_struct + process_vmi_linux_rekall.task_struct_pid, 0, (uint32_t *) &pid);
+    addr_t task_struct_pid = task_struct + process_vmi_linux_rekall.task_struct_pid;
+    if (vmi_read_32_va(vmi, task_struct_pid, 0, (uint32_t *) &pid) != VMI_SUCCESS)
+        return 0;
 
     return pid;
 }
@@ -78,5 +84,34 @@ char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event) {
     }
 
     addr_t task_struct = vmi_current_task_struct_linux(vmi, event);
+
+    if (!task_struct)
+        return NULL;
+
     return vmi_read_str_va(vmi, task_struct + process_vmi_linux_rekall.task_struct_comm, 0);
+}
+
+vmi_pid_t vmi_current_parent_pid_linux(vmi_instance_t vmi, vmi_event_t *event) {
+
+    if (!process_vmi_ready) {
+        fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
+        return 0;
+    }
+
+    addr_t task_struct = vmi_current_task_struct_linux(vmi, event);
+
+    if (!task_struct)
+        return 0;
+
+    addr_t parent_task_struct;
+    addr_t task_struct_parent = task_struct + process_vmi_linux_rekall.task_struct_parent;
+    if (vmi_read_addr_va(vmi, task_struct_parent, 0, &parent_task_struct) != VMI_SUCCESS)
+        return 0;
+
+    vmi_pid_t parent_pid;
+    addr_t task_struct_pid = parent_task_struct + process_vmi_linux_rekall.task_struct_pid;
+    if (vmi_read_32_va(vmi, task_struct_pid, 0, (uint32_t *) &parent_pid) != VMI_SUCCESS)
+        return 0;
+
+    return parent_pid;
 }

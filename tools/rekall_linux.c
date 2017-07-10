@@ -36,8 +36,9 @@ int main(int argc, char *argv[]) {
     if (!parse_rekall_linux(&rekall, argv[1])) {
         printf("Failed to parse rekall file\n");
     } else {
-        printf("current_thread = %ld, comm = %ld, pid = %ld\n", rekall.current_task,
-                rekall.task_struct_comm, rekall.task_struct_pid);
+        printf("current_thread = %ld, comm = %ld, pid = %ld parent = %ld\n",
+                rekall.current_task, rekall.task_struct_comm, rekall.task_struct_pid,
+                rekall.task_struct_parent);
     }
 
     return EXIT_SUCCESS;

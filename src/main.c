@@ -32,11 +32,11 @@
 #include <vmi/process.h>
 
 /* Global variables */
-vmi_event_t cr3_monitoring;
 char *domain_name;
 char *process_name;
 char *output_dir;
 vmi_pid_t process_pid;
+uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
 
 /* Signal handler */
 static int interrupted = 0;
@@ -48,7 +48,7 @@ static void close_handler(int sig) {
 /**
  * Callback that's invoked when a process tries to write then execute.
  */
-void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, page_cat_t page_cat) {
+void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat) {
 
     uint64_t page_size;
 
@@ -72,12 +72,13 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, page_cat_t page_cat) {
         return;
     }
 
+    // Extract the W2X page from the guest VM
     addr_t paddr = (event->mem_event.gfn << 12) + event->mem_event.offset;
     uint64_t dump_size = page_size - event->mem_event.offset;
-    char * buffer = (char *) malloc(dump_size);
+    char * buffer = (char *) malloc(dump_size); // TODO - Cache allocate page sizes for better performance
     vmi_read_pa(vmi, paddr, (void *) buffer, dump_size);
 
-    add_to_dump_queue(buffer, dump_size, event->x86_regs->rip);
+    add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip);
 }
 
 void usage(char *name) {
@@ -92,14 +93,17 @@ void usage(char *name) {
     printf("One of the following must be provided:\n");
     printf("    -p <pid>                 unpack process with provided PID\n");
     printf("    -n <process_name>        unpack process with provided name\n");
+    printf("\n");
+    printf("Optional arguments:\n");
+    printf("    -f                       also follow children created by target process\n");
 }
 
 event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event) {
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     if (pid == process_pid) {
-        monitor_add_page_table(vmi, pid, w2x_cb);
-        vmi_clear_event(vmi, &cr3_monitoring, NULL);
+        monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
+        monitor_remove_cr3(monitor_pid);
     }
 
     return VMI_EVENT_RESPONSE_NONE;
@@ -110,9 +114,10 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event) {
     char *name = vmi_current_name(vmi, event);
     if (!strncmp(name, process_name, strlen(name))) {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
-        monitor_add_page_table(vmi, pid, w2x_cb);
-        vmi_clear_event(vmi, &cr3_monitoring, NULL);
+        monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
+        monitor_remove_cr3(monitor_name);
     }
+
     return VMI_EVENT_RESPONSE_NONE;
 }
 
@@ -129,7 +134,7 @@ int main(int argc, char *argv[]) {
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:o:p:n:")) != -1) {
+    while ((c = getopt(argc, argv, "d:r:o:p:n:f")) != -1) {
         switch (c) {
             case 'd':
                 domain_name = optarg;
@@ -145,6 +150,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'n':
                 process_name = optarg;
+                break;
+            case 'f':
+                tracking_flags |= MONITOR_FOLLOW_CHILDREN;
                 break;
             default:
                 usage(argv[0]);
@@ -178,17 +186,20 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    SETUP_REG_EVENT(&cr3_monitoring, CR3, VMI_REGACCESS_W, 0, NULL);
+    if (monitor_init(vmi)) {
+        fprintf(stderr, "ERROR: Unpack - Failed to initialize monitor\n");
+        vmi_destroy(vmi);
+        return EXIT_FAILURE;
+    }
+
     if (process_name != NULL) {
-        cr3_monitoring.callback = monitor_name;
+        monitor_add_cr3(monitor_name);
     } else if (process_pid > 0) {
-        cr3_monitoring.callback = monitor_pid;
+        monitor_add_cr3(monitor_pid);
     }
 
     // Initialize various helper methods
     start_dump_thread(output_dir);
-    vmi_pause_vm(vmi);
-    monitor_init(vmi);
     if (!process_vmi_init(vmi, rekall)) {
         fprintf(stderr, "ERROR: Unpack - Failed to initialize process VMI\n");
         monitor_destroy(vmi);
@@ -196,8 +207,6 @@ int main(int argc, char *argv[]) {
         stop_dump_thread();
         return EXIT_FAILURE;
     }
-    vmi_register_event(vmi, &cr3_monitoring);
-    vmi_resume_vm(vmi);
 
     // Main loop
     status_t status;
@@ -210,10 +219,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Cleanup
-    vmi_pause_vm(vmi);
     monitor_destroy(vmi);
     process_vmi_destroy(vmi);
-    vmi_resume_vm(vmi);
     stop_dump_thread();
 
     vmi_destroy(vmi);

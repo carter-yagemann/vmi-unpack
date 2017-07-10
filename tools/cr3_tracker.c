@@ -42,9 +42,10 @@ static void close_handler(int sig) {
 event_response_t monitor_cr3(vmi_instance_t vmi, vmi_event_t *event) {
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
+    vmi_pid_t parent_pid = vmi_current_parent_pid(vmi, event);
     char *name = vmi_current_name(vmi, event);
 
-    printf("VCPU: %d PID: %d NAME: %s\n", event->vcpu_id, pid, name);
+    printf("VCPU: %d PID: %d NAME: %s PARENT: %d\n", event->vcpu_id, pid, name, parent_pid);
 
     free(name);
     return VMI_EVENT_RESPONSE_NONE;

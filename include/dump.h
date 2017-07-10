@@ -33,9 +33,10 @@ pthread_t dump_worker;
 char *dump_output_dir;
 sem_t dump_sem;
 GQueue *dump_queue;
-uint64_t layer_num;
+GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 
 typedef struct {
+    vmi_pid_t pid;
     reg_t rip;
     char *buff;
     uint64_t size;
@@ -60,8 +61,9 @@ void stop_dump_thread();
  * @param buffer A pointer to the buffer to dump. This should be left allocated
  * and the worker thread will handle freeing it.
  * @param size The size of the buffer.
+ * @param pid The PID of the process that executed the page.
  * @param rip The value of the RIP register when this layer was executed.
  */
-void add_to_dump_queue(char *buffer, uint64_t size, reg_t rip);
+void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip);
 
 #endif

@@ -53,7 +53,7 @@ void process_vmi_destroy();
  *
  * @param vmi A vmi_instance_t for the guest VM to introspect.
  *
- * @return The PID of the current process.
+ * @return The PID of the current process or 0 if it could not be determined.
  */
 vmi_pid_t (*vmi_current_pid)(vmi_instance_t vmi, vmi_event_t *event);
 
@@ -66,16 +66,28 @@ vmi_pid_t (*vmi_current_pid)(vmi_instance_t vmi, vmi_event_t *event);
  */
 char *(*vmi_current_name)(vmi_instance_t vmi, vmi_event_t *event);
 
+/**
+ * Gets the parent PID for the current process.
+ *
+ * @param vmi A vmi_instance_t for the guest VM to introspect.
+ *
+ * @return The PID of the parent of the current process or 0 if it could not be
+ * determined.
+ */
+vmi_pid_t (*vmi_current_parent_pid)(vmi_instance_t vmi, vmi_event_t *event);
+
 /* LINUX */
 
 linux_rekall_t process_vmi_linux_rekall;
 vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event);
 char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event);
+vmi_pid_t vmi_current_parent_pid_linux(vmi_instance_t vmi, vmi_event_t *event);
 
 /* WINDOWS */
 
 windows_rekall_t process_vmi_windows_rekall;
 vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event);
 char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event);
+vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event);
 
 #endif

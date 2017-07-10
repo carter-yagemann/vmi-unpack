@@ -38,7 +38,7 @@ static void close_handler(int sig) {
 /**
  * Callback that's invoked when a process tries to write then execute.
  */
-void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, page_cat_t cat) {
+void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t cat) {
 
     printf("Caught write then execute! [EIP=0x%lx]\n", event->x86_regs->rip);
 }
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 
     vmi_pause_vm(vmi);
     monitor_init(vmi);
-    monitor_add_page_table(vmi, atoi(argv[2]), w2x_cb);
+    monitor_add_page_table(vmi, atoi(argv[2]), w2x_cb, MONITOR_FOLLOW_REMAPPING);
     vmi_resume_vm(vmi);
 
     // Main loop

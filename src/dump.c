@@ -31,15 +31,26 @@
 
 #include <dump.h>
 
-char *gen_layer_filename(reg_t rip) {
+char *gen_layer_filename(vmi_pid_t pid, reg_t rip) {
 
+    uint64_t *layer_ptr;
     int dir_len = strlen(dump_output_dir);
 
-    // format: <output_dir><layer>-<rip>.bin
-    char *filename = (char *) malloc(dir_len + 38);
-    sprintf(filename, "%s%016lx-%016lx.bin", dump_output_dir, layer_num, rip);
+    if (!g_hash_table_contains(pid_layer, &pid)) {
+        vmi_pid_t *pid_ptr = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
+        *pid_ptr = pid;
+        layer_ptr = (uint64_t *) malloc(sizeof(uint64_t));
+        *layer_ptr = 0;
+        g_hash_table_insert(pid_layer, pid_ptr, layer_ptr);
+    }
 
-    layer_num++;
+    layer_ptr = (uint64_t *) g_hash_table_lookup(pid_layer, &pid);
+
+    // format: <output_dir><pid>-<layer>-<rip>.bin\0
+    char *filename = (char *) malloc(dir_len + 49);
+    sprintf(filename, "%s%010d-%016lx-%016lx.bin", dump_output_dir, pid, *layer_ptr, rip);
+
+    (*layer_ptr)++;
 
     return filename;
 }
@@ -55,12 +66,12 @@ void *dump_worker_loop(void *data) {
 
         layer = (dump_layer_t *) g_queue_pop_head(dump_queue);
 
-        if (layer->rip == 0 && layer->buff == NULL && layer->size == 0) {
+        if (layer->pid == 0 && layer->rip == 0 && layer->buff == NULL && layer->size == 0) {
             free(layer);
             break; // signal to stop
         }
 
-        char *filename = gen_layer_filename(layer->rip);
+        char *filename = gen_layer_filename(layer->pid, layer->rip);
         ofile = fopen(filename, "wb");
         fwrite(layer->buff, sizeof(char), layer->size, ofile);
         fclose(ofile);
@@ -89,14 +100,13 @@ void start_dump_thread(char *dir) {
         dump_output_dir[tail + 1] = '\0';
     }
 
-    // Create semaphore and queue
+    // Create semaphore, queue, and hashtable
     if(sem_init(&dump_sem, 0, 0)) {
         fprintf(stderr, "ERROR: Dump Thread - Failed to initialize semaphore\n");
         return;
     }
     dump_queue = g_queue_new();
-
-    layer_num = 0;
+    pid_layer = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
 
     // Start worker thread
     pthread_create(&dump_worker, NULL, dump_worker_loop, NULL);
@@ -105,18 +115,20 @@ void start_dump_thread(char *dir) {
 void stop_dump_thread() {
 
     // Signal the worker that we're done by adding an empty item to its queue
-    add_to_dump_queue(NULL, 0, 0);
+    add_to_dump_queue(NULL, 0, 0, 0);
 
     pthread_join(dump_worker, NULL);
 
     free(dump_output_dir);
     sem_destroy(&dump_sem);
     g_queue_free(dump_queue);
+    g_hash_table_destroy(pid_layer);
 }
 
-void add_to_dump_queue(char *buffer, uint64_t size, reg_t rip) {
+void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip) {
 
     dump_layer_t *layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
+    layer->pid = pid;
     layer->rip = rip;
     layer->buff = buffer;
     layer->size = size;
