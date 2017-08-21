@@ -127,3 +127,15 @@ vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event)
 
     return parent_pid;
 }
+
+mem_seg_t vmi_current_find_segment_windows(vmi_instance_t vmi, vmi_event_t *event, addr_t addr)
+{
+    // TODO - implement vmi_current_find_segment_windows
+    fprintf(stderr, "WARNING: Windows Process VMI - vmi_current_find_segment_windows not implemented.\n");
+    mem_seg_t mem_seg =
+    {
+        mem_seg.base_va = 0,
+        mem_seg.size = 0,
+    };
+    return mem_seg;
+}

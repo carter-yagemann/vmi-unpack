@@ -28,6 +28,7 @@
 #include <glib-object.h>
 #include <json-glib/json-glib.h>
 
+// TODO - Extend windows rekall with MM data
 typedef struct
 {
     gint64 kpcr_prcb;
@@ -44,6 +45,13 @@ typedef struct
     gint64 task_struct_comm;
     gint64 task_struct_pid;
     gint64 task_struct_parent;
+    gint64 task_struct_mm;
+    gint64 task_struct_tasks;
+    gint64 mm_struct_mmap;
+    gint64 mm_struct_pgd;
+    gint64 vm_area_struct_vm_start;
+    gint64 vm_area_struct_vm_end;
+    gint64 vm_area_struct_vm_next;
 } linux_rekall_t;
 
 /**

@@ -31,9 +31,54 @@
 #define STACK_SIZE_16K 0x3fff
 #define MIN_KERNEL_BOUNDARY 0x80000000
 
+addr_t linux_get_taskstruct_addr_from_pgd(vmi_instance_t vmi, addr_t pgd)
+{
+    addr_t list_head = 0, next_process = 0;
+    addr_t task_pgd = 0;
+    uint8_t width = 0;
+
+    /*
+     * First we need a pointer to the initial entry in the tasks list.
+     * Note that this is task_struct->tasks, not the base addr
+     * of task_struct: task_struct base = $entry - tasks_offset.
+     */
+    vmi_translate_ksym2v(vmi, "init_task", &next_process);
+    list_head = next_process;
+
+    width = vmi_get_address_width(vmi);
+
+    do
+    {
+        addr_t ptr = 0;
+        vmi_read_addr_va(vmi, next_process + process_vmi_linux_rekall.task_struct_mm, 0, &ptr);
+
+        /*
+         * task_struct->mm is NULL when Linux is executing on the behalf
+         * of a task, or if the task represents a kthread. In this context,
+         * task_struct->active_mm is non-NULL and we can use it as
+         * a fallback. task_struct->active_mm can be found very reliably
+         * at task_struct->mm + 1 pointer width
+         */
+        if (!ptr && width)
+            vmi_read_addr_va(vmi, next_process + process_vmi_linux_rekall.task_struct_mm + width, 0, &ptr);
+        vmi_read_addr_va(vmi, ptr + process_vmi_linux_rekall.mm_struct_pgd, 0, &task_pgd);
+
+        if (VMI_SUCCESS == vmi_translate_kv2p(vmi, task_pgd, &task_pgd) &&
+            task_pgd == pgd)
+            return next_process;
+
+        vmi_read_addr_va(vmi, next_process + process_vmi_linux_rekall.task_struct_tasks, 0, &next_process);
+        next_process -= process_vmi_linux_rekall.task_struct_tasks;
+
+        // If we are back at the list head, we are done.
+    }
+    while (list_head != next_process);
+
+    return 0;
+}
+
 addr_t vmi_current_task_struct_linux(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     addr_t current_task = 0;
 
     access_context_t ctx =
@@ -53,7 +98,8 @@ addr_t vmi_current_task_struct_linux(vmi_instance_t vmi, vmi_event_t *event)
             // If we still fail, try assuming the kernel stack size is 8KB
             ctx.addr = event->x86_regs->gs_base & ~STACK_SIZE_8K;
             if (vmi_read_addr(vmi, &ctx, &current_task) == VMI_FAILURE || current_task < MIN_KERNEL_BOUNDARY)
-                return 0; // Give up
+                // As a last resort, try traversing the entire process table (VERY SLOW!)
+                return linux_get_taskstruct_addr_from_pgd(vmi, event->x86_regs->cr3);
         }
     }
 
@@ -62,7 +108,6 @@ addr_t vmi_current_task_struct_linux(vmi_instance_t vmi, vmi_event_t *event)
 
 vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     if (!process_vmi_ready)
     {
         fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
@@ -84,7 +129,6 @@ vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event)
 
 char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     if (!process_vmi_ready)
     {
         fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
@@ -101,7 +145,6 @@ char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event)
 
 vmi_pid_t vmi_current_parent_pid_linux(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     if (!process_vmi_ready)
     {
         fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
@@ -124,4 +167,78 @@ vmi_pid_t vmi_current_parent_pid_linux(vmi_instance_t vmi, vmi_event_t *event)
         return 0;
 
     return parent_pid;
+}
+
+mem_seg_t vmi_current_find_segment_linux(vmi_instance_t vmi, vmi_event_t *event, addr_t addr)
+{
+    mem_seg_t mem_seg =
+    {
+        mem_seg.base_va = 0,
+        mem_seg.size = 0,
+    };
+
+    if (!process_vmi_ready)
+    {
+        fprintf(stderr, "ERROR: Linux Process VMI - Not initialized\n");
+        return mem_seg;
+    }
+
+    addr_t task_struct = vmi_current_task_struct_linux(vmi, event);
+
+    if (!task_struct)
+    {
+        fprintf(stderr, "WARNING: Linux Process VMI - Could not find current task struct\n");
+        return mem_seg;
+    }
+
+    addr_t mm;
+    addr_t task_struct_mm = task_struct + process_vmi_linux_rekall.task_struct_mm;
+    if (vmi_read_addr_va(vmi, task_struct_mm, 0, &mm) != VMI_SUCCESS)
+    {
+        fprintf(stderr, "WARNING: Linux Process VMI - Could not find current memory mapping\n");
+        return mem_seg;
+    }
+
+    // task_struct->mm can sometimes be NULL (e.g. some kernel worker threads).
+    if (!mm)
+    {
+        fprintf(stderr, "WARNING: Linux Process VMI - Current memory mapping is NULL\n");
+        return mem_seg;
+    }
+
+    addr_t vma;
+    addr_t mm_struct_mmap = mm + process_vmi_linux_rekall.mm_struct_mmap;
+    if (vmi_read_addr_va(vmi, mm_struct_mmap, 0, &vma) != VMI_SUCCESS)
+    {
+        fprintf(stderr, "WARNING: Linux Process VMI - Could not find root VMA\n");
+        return mem_seg;
+    }
+
+    // vma is now a pointer to the current process' first virtual memory area.
+    // Iterate through the VMAs looking for the one the provided addr belongs to.
+    while (vma)
+    {
+        addr_t start, end;
+        addr_t vma_start = vma + process_vmi_linux_rekall.vm_area_struct_vm_start;
+        addr_t vma_end = vma + process_vmi_linux_rekall.vm_area_struct_vm_end;
+
+        if (vmi_read_addr_va(vmi, vma_start, 0, &start) != VMI_SUCCESS)
+            return mem_seg;
+
+        if (vmi_read_addr_va(vmi, vma_end, 0, &end) != VMI_SUCCESS)
+            return mem_seg;
+
+        if (addr >= start && addr <= end)
+        {
+            mem_seg.base_va = start;
+            mem_seg.size = end - start;
+            return mem_seg;
+        }
+
+        addr_t vma_next = vma + process_vmi_linux_rekall.vm_area_struct_vm_next;
+        if (vmi_read_addr_va(vmi, vma_next, 0, &vma) != VMI_SUCCESS)
+            return mem_seg;
+    }
+
+    return mem_seg; // no match found
 }

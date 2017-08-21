@@ -37,7 +37,6 @@
 
 void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access, vmi_pid_t pid, page_cat_t cat)
 {
-
     if (g_hash_table_contains(trapped_pages, &paddr))
         return;
 
@@ -55,7 +54,6 @@ void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access,
 
 void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid)
 {
-
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
@@ -81,7 +79,6 @@ void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid)
 
 void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid)
 {
-
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
@@ -115,7 +112,6 @@ void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid)
 
 void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid)
 {
-
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
@@ -149,7 +145,6 @@ void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid)
 
 void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid)
 {
-
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
@@ -171,7 +166,6 @@ void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid)
 
 void monitor_trap_table(vmi_instance_t vmi, int pid)
 {
-
     addr_t dtb;
 
     if (pid == 0)
@@ -180,7 +174,7 @@ void monitor_trap_table(vmi_instance_t vmi, int pid)
         return;
     }
 
-    dtb = vmi_pid_to_dtb(vmi, (vmi_pid_t) pid);
+    vmi_pid_to_dtb(vmi, (vmi_pid_t) pid, &dtb);
 
     if (dtb == 0)
     {
@@ -193,7 +187,6 @@ void monitor_trap_table(vmi_instance_t vmi, int pid)
 
 void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat)
 {
-
     pending_rescan_t *pending = (pending_rescan_t *) malloc(sizeof(pending_rescan_t));
     pending->paddr = paddr;
     pending->pid = pid;
@@ -204,7 +197,6 @@ void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat)
 
 void process_pending_rescan(gpointer data, gpointer user_data)
 {
-
     pending_rescan_t *rescan = (pending_rescan_t *) data;
 
     const page_cat_t cat = rescan->cat;
@@ -233,13 +225,11 @@ void process_pending_rescan(gpointer data, gpointer user_data)
 
 void cr3_callback_dispatcher(gpointer cb, gpointer event)
 {
-
     ((event_callback_t)cb)(monitor_vmi, event);
 }
 
 event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     // If there are any registered callbacks, invoke them
     g_slist_foreach(cr3_callbacks, cr3_callback_dispatcher, event);
 
@@ -280,14 +270,12 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 
 event_response_t monitor_handler_ss(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     g_slist_foreach(pending_page_rescan, process_pending_rescan, NULL);
     return VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP;
 }
 
 event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     addr_t paddr = PADDR_SHIFT(event->mem_event.gfn);
     vmi_pid_t *pid_ptr = (vmi_pid_t *) g_hash_table_lookup(page_p2pid, &paddr);
 
@@ -316,7 +304,6 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
             g_hash_table_insert(page_p2pid, new_paddr, new_pid);
 
             *pid_ptr = curr_pid;
-
         }
         else
         {
@@ -370,7 +357,6 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
 
 int monitor_init(vmi_instance_t vmi)
 {
-
     if (vmi_get_page_mode(vmi, 0) != VMI_PM_IA32E)
     {
         fprintf(stderr, "ERROR: Monitor - Only IA-32e paging is supported at this time\n");
@@ -422,7 +408,6 @@ int monitor_init(vmi_instance_t vmi)
 
 void monitor_destroy(vmi_instance_t vmi)
 {
-
     if (!page_table_monitor_init)
         return;
 
@@ -439,7 +424,6 @@ void monitor_destroy(vmi_instance_t vmi)
 
 void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags)
 {
-
     if (cb == NULL)
     {
         fprintf(stderr, "ERROR: Monitor - Must specify callback function, cannot be null.\n");
@@ -462,7 +446,7 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     *cb_event_key = pid;
     page_cb_event_t *cb_event = (page_cb_event_t *) malloc(sizeof(page_cb_event_t));
     cb_event->pid = pid;
-    cb_event->cr3 = vmi_pid_to_dtb(vmi, pid);
+    vmi_pid_to_dtb(vmi, pid, &cb_event->cr3);
     cb_event->flags = flags;
     cb_event->cb = cb;
 
@@ -488,12 +472,10 @@ void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
 
 void monitor_add_cr3(event_callback_t cb)
 {
-
     cr3_callbacks = g_slist_prepend(cr3_callbacks, cb);
 }
 
 void monitor_remove_cr3(event_callback_t cb)
 {
-
     cr3_callbacks = g_slist_remove(cr3_callbacks, cb);
 }

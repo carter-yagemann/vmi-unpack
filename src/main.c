@@ -30,13 +30,16 @@
 #include <dump.h>
 #include <paging/intel_64.h>
 #include <vmi/process.h>
+#include <output/output_parser.h>
 
 /* Global variables */
-char *domain_name;
-char *process_name;
-char *output_dir;
-vmi_pid_t process_pid;
+char *domain_name = NULL;
+char *process_name = NULL;
+char *output_dir = NULL;
+char *rekall = NULL;
+vmi_pid_t process_pid = 0;
 uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
+char *base_image = NULL;
 
 /* Signal handler */
 static int interrupted = 0;
@@ -51,56 +54,43 @@ static void close_handler(int sig)
  */
 void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
+    size_t dump_size;
 
-    uint64_t page_size;
-
-    switch (page_cat)
+    mem_seg_t vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
+    if (!vma.size)
     {
-        case PAGE_CAT_4KB_FRAME:
-            page_size = 0x1000;
-            break;
-        case PAGE_CAT_2MB_FRAME:
-            page_size = 0x200000;
-            break;
-        case PAGE_CAT_1GB_FRAME:
-            page_size = 0x40000000;
-            break;
-        default:
-            page_size = 0;
-            break;
-    }
-
-    if (!page_size)
-    {
-        fprintf(stderr, "ERROR: Unpack - Unknown page size\n");
+        fprintf(stderr, "WARNING: Unpack - Could not find memory segment for virtual address 0x%lx\n", event->mem_event.gla);
         return;
     }
 
-    // Extract the W2X page from the guest VM
-    addr_t paddr = (event->mem_event.gfn << 12) + event->mem_event.offset;
-    uint64_t dump_size = page_size - event->mem_event.offset;
-    char *buffer = (char *) malloc(dump_size);  // TODO - Cache allocate page sizes for better performance
-    vmi_read_pa(vmi, paddr, (void *) buffer, dump_size);
+    char *buffer = (char *) malloc(vma.size);
+    if (!buffer)
+    {
+        fprintf(stderr, "ERROR: Unpack - Failed to malloc buffer to dump W2X event\n");
+        return;
+    }
 
+    vmi_read_va(vmi, vma.base_va, pid, vma.size, buffer, &dump_size);
     add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip);
 }
 
 void usage(char *name)
 {
-
     printf("%s [options]\n", name);
     printf("\n");
     printf("Required arguments:\n");
-    printf("    -d <domain_name>         name of VM to unpack from\n");
-    printf("    -r <rekall_file>         path to rekall file\n");
-    printf("    -o <output_dir>          directory to dump layers into\n");
+    printf("    -d <domain_name>         Name of VM to unpack from.\n");
+    printf("    -r <rekall_file>         Path to rekall file.\n");
+    printf("    -o <output_dir>          Directory to dump layers into.\n");
     printf("\n");
     printf("One of the following must be provided:\n");
-    printf("    -p <pid>                 unpack process with provided PID\n");
-    printf("    -n <process_name>        unpack process with provided name\n");
+    printf("    -p <pid>                 Unpack process with provided PID.\n");
+    printf("    -n <process_name>        Unpack process with provided name.\n");
     printf("\n");
     printf("Optional arguments:\n");
-    printf("    -f                       also follow children created by target process\n");
+    printf("    -f                       Also follow children created by target process.\n");
+    printf("    -i <exec_bin>            Fix layer headers based on provided executable.\n");
+    printf("                             This image is NOT executable.\n");
 }
 
 event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
@@ -135,16 +125,10 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
  */
 int main(int argc, char *argv[])
 {
-
-    domain_name = NULL;
-    char *rekall = NULL;
-    process_name = NULL;
-    output_dir = NULL;
-    process_pid = 0;
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:o:p:n:f")) != -1)
+    while ((c = getopt(argc, argv, "d:r:o:p:n:fi:")) != -1)
     {
         switch (c)
         {
@@ -166,6 +150,8 @@ int main(int argc, char *argv[])
             case 'f':
                 tracking_flags |= MONITOR_FOLLOW_CHILDREN;
                 break;
+            case 'i':
+                base_image = optarg;
             default:
                 usage(argv[0]);
                 return EXIT_FAILURE;
@@ -176,6 +162,13 @@ int main(int argc, char *argv[])
         (process_pid == 0 && process_name == NULL))
     {
         usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    // If a base image was provided, validate it.
+    if (base_image && !output_init_parser(base_image))
+    {
+        fprintf(stderr, "ERROR: Unpack - Unrecognized base image provided.\n");
         return EXIT_FAILURE;
     }
 

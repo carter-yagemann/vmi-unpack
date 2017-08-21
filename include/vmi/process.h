@@ -32,6 +32,12 @@
 
 bool process_vmi_ready;
 
+typedef struct
+{
+    addr_t base_va; // Base virtual address of memory segment
+    ssize_t size;   // Size of the memory segment
+} mem_seg_t;
+
 /**
  * Initializes the functions in this header file.
  *
@@ -52,6 +58,7 @@ void process_vmi_destroy();
  * vmi_dtb_to_pid because it doesn't walk the entire process list.
  *
  * @param vmi A vmi_instance_t for the guest VM to introspect.
+ * @param event A vmi_event_t to give the method context.
  *
  * @return The PID of the current process or 0 if it could not be determined.
  */
@@ -61,6 +68,7 @@ vmi_pid_t (*vmi_current_pid)(vmi_instance_t vmi, vmi_event_t *event);
  * Gets the current process' name.
  *
  * @param vmi A vmi_instance_t for the guest VM to introspect.
+ * @param event A vmi_event_t to give the method context.
  *
  * @return The current process' name or NULL if it could not be determined.
  */
@@ -70,11 +78,26 @@ char *(*vmi_current_name)(vmi_instance_t vmi, vmi_event_t *event);
  * Gets the parent PID for the current process.
  *
  * @param vmi A vmi_instance_t for the guest VM to introspect.
+ * @param event A vmi_event_t to give the method context.
  *
  * @return The PID of the parent of the current process or 0 if it could not be
  * determined.
  */
 vmi_pid_t (*vmi_current_parent_pid)(vmi_instance_t vmi, vmi_event_t *event);
+
+/**
+ * Gets information on the memory segment that the given address belongs to in
+ * the current process.
+ *
+ * @param vmi A vmi_instance_t for the guest VM to introspect.
+ * @param event A vmi_event_t to give the method context.
+ * @param addr The virtual address to look up.
+ *
+ * @return A struct containing information about the found memory segment. If
+ *         the address isn't mapped, the returned struct will contain a size
+ *         of 0.
+ */
+mem_seg_t (*vmi_current_find_segment)(vmi_instance_t vmi, vmi_event_t *event, addr_t addr);
 
 /* LINUX */
 
@@ -82,6 +105,7 @@ linux_rekall_t process_vmi_linux_rekall;
 vmi_pid_t vmi_current_pid_linux(vmi_instance_t vmi, vmi_event_t *event);
 char *vmi_current_name_linux(vmi_instance_t vmi, vmi_event_t *event);
 vmi_pid_t vmi_current_parent_pid_linux(vmi_instance_t vmi, vmi_event_t *event);
+mem_seg_t vmi_current_find_segment_linux(vmi_instance_t vmi, vmi_event_t *event, addr_t addr);
 
 /* WINDOWS */
 
@@ -89,5 +113,6 @@ windows_rekall_t process_vmi_windows_rekall;
 vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event);
 char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event);
 vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event);
+mem_seg_t vmi_current_find_segment_windows(vmi_instance_t vmi, vmi_event_t *event, addr_t addr);
 
 #endif

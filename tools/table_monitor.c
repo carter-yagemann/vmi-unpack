@@ -27,6 +27,7 @@
 
 #include <monitor.h>
 #include <paging/intel_64.h>
+#include <vmi/process.h>
 
 /* Signal handler */
 static int interrupted = 0;
@@ -41,8 +42,10 @@ static void close_handler(int sig)
  */
 void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t cat)
 {
+    mem_seg_t mem_seg = vmi_current_find_segment(vmi, event, event->x86_regs->rip);
 
-    printf("Caught write then execute! [EIP=0x%lx]\n", event->x86_regs->rip);
+    printf("Caught write then execute! [PID=%d,EIP=0x%lx,base=0x%lx,size=%ld]\n",
+           pid, event->x86_regs->rip, mem_seg.base_va, mem_seg.size);
 }
 
 /**
@@ -50,10 +53,9 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t ca
  */
 int main(int argc, char *argv[])
 {
-
-    if (argc < 3)
+    if (argc < 4)
     {
-        printf("%s <domain_name> <pid>\n", argv[0]);
+        printf("%s <domain_name> <pid> <rekall_json>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -79,10 +81,9 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    vmi_pause_vm(vmi);
+    process_vmi_init(vmi, argv[3]);
     monitor_init(vmi);
     monitor_add_page_table(vmi, atoi(argv[2]), w2x_cb, MONITOR_FOLLOW_REMAPPING);
-    vmi_resume_vm(vmi);
 
     // Main loop
     status_t status;
@@ -97,9 +98,8 @@ int main(int argc, char *argv[])
     }
 
     // Cleanup
-    vmi_pause_vm(vmi);
     monitor_destroy(vmi);
-    vmi_resume_vm(vmi);
+    process_vmi_destroy(vmi);
 
     vmi_destroy(vmi);
     return EXIT_SUCCESS;

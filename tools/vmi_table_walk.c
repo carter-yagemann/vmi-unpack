@@ -107,7 +107,7 @@ void walk_pml4(vmi_instance_t vmi, int pid)
     addr_t entry_addr;
     uint64_t entry_val;
 
-    dtb = vmi_pid_to_dtb(vmi, (vmi_pid_t) pid);
+    vmi_pid_to_dtb(vmi, (vmi_pid_t) pid, &dtb);
 
     // PML4
     pml4 = PAGING_INTEL_64_GET_PML4_PADDR(dtb);
