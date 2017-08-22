@@ -37,6 +37,7 @@ int main(int argc, char *argv[])
     if (!parse_rekall_linux(&rekall, argv[1]))
     {
         printf("Failed to parse rekall file\n");
+        return EXIT_FAILURE;
     }
     else
     {

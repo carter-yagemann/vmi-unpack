@@ -38,12 +38,17 @@ int main(int argc, char *argv[])
     if (!parse_rekall_windows(&rekall, argv[1]))
     {
         printf("Failed to parse rekall file\n");
+        return EXIT_FAILURE;
     }
     else
     {
-        printf("kprc_prcb = %ld, kpcr_currentthread = %ld, kthread_process = %ld, eprocess_pname = %ld, eprocess_pid = %ld eprocess_parent_pid = %ld\n",
-               rekall.kpcr_prcb, rekall.kprcb_currentthread, rekall.kthread_process, rekall.eprocess_pname,
-               rekall.eprocess_pid, rekall.eprocess_parent_pid);
+        printf("kprocess_pdbase = %ld\n", rekall.kprocess_pdbase);
+        printf("kprc_prcb = %ld, kpcr_currentthread = %ld, kthread_process = %ld\n",
+               rekall.kpcr_prcb, rekall.kprcb_currentthread, rekall.kthread_process);
+        printf("eprocess_pname = %ld eprocess_pid = %ld eprocess_parent_pid = %ld eprocess_vadroot = %ld\n",
+               rekall.eprocess_pname, rekall.eprocess_pid, rekall.eprocess_parent_pid, rekall.eprocess_vadroot);
+        printf("mmvad_leftchild = %ld mmvad_rightchild = %ld mmvad_startingvpn = %ld mmvad_endingvpn = %ld\n",
+               rekall.mmvad_leftchild, rekall.mmvad_rightchild, rekall.mmvad_startingvpn, rekall.mmvad_endingvpn);
     }
 
     return EXIT_SUCCESS;

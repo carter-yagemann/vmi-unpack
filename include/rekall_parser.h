@@ -28,15 +28,21 @@
 #include <glib-object.h>
 #include <json-glib/json-glib.h>
 
-// TODO - Extend windows rekall with MM data
 typedef struct
 {
     gint64 kpcr_prcb;
     gint64 kprcb_currentthread;
     gint64 kthread_process;
+    gint64 kprocess_pdbase;
     gint64 eprocess_pname;
     gint64 eprocess_pid;
     gint64 eprocess_parent_pid;
+    gint64 eprocess_tasks;
+    gint64 eprocess_vadroot;
+    gint64 mmvad_leftchild;
+    gint64 mmvad_rightchild;
+    gint64 mmvad_startingvpn;
+    gint64 mmvad_endingvpn;
 } windows_rekall_t;
 
 typedef struct
