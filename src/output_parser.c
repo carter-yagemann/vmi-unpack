@@ -137,7 +137,8 @@ void output_fix_dos_header(void *layer, ssize_t layer_size, uint64_t entry)
     // Fix sections
     layer_pe.file_header->NumberOfSections = base_image_pe.file_header->NumberOfSections;
 
-    for (unsigned i = 0; i < (layer_pe.file_header->NumberOfSections); i++)
+    unsigned i;
+    for (i = 0; i < (layer_pe.file_header->NumberOfSections); i++)
     {
         if ((unsigned long) & (layer_pe.sect_header[i]) > (unsigned long) layer_size)
         {
