@@ -121,6 +121,31 @@ void output_fix_dos_header(void *layer, ssize_t layer_size, uint64_t entry)
         return;
     }
 
-    // TODO - Implement output_fix_dos_header()
-    fprintf(stderr, "WARNING: Output Parser - DOS header fixer not implemented.\n");
+    mapped_pe_t layer_pe;
+    if (!parse_dos_header(layer, &layer_pe))
+    {
+        fprintf(stderr, "ERROR: Output Parser - Layer does not appear to contain a Windows PE header\n");
+        return;
+    }
+
+    // The following fixes are based on Ether (ether.gtisc.gatech.edu)
+
+    // Change entry point if one was given
+    if (entry)
+        layer_pe.opt_header->AddressOfEntryPoint = entry;
+
+    // Fix sections
+    layer_pe.file_header->NumberOfSections = base_image_pe.file_header->NumberOfSections;
+
+    for (unsigned i = 0; i < (layer_pe.file_header->NumberOfSections); i++)
+    {
+        if ((unsigned long) &(layer_pe.sect_header[i]) > (unsigned long) layer_size)
+        {
+            fprintf(stderr, "WARNING: Output Parser - Bad pointer in section header %u\n", i);
+            break;
+        }
+
+        layer_pe.sect_header[i].SizeOfRawData = layer_pe.sect_header[i].Misc.VirtualSize;
+        layer_pe.sect_header[i].PointerToRawData = layer_pe.sect_header[i].VirtualAddress;
+    }
 }
