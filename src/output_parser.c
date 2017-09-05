@@ -139,7 +139,7 @@ void output_fix_dos_header(void *layer, ssize_t layer_size, uint64_t entry)
 
     for (unsigned i = 0; i < (layer_pe.file_header->NumberOfSections); i++)
     {
-        if ((unsigned long) &(layer_pe.sect_header[i]) > (unsigned long) layer_size)
+        if ((unsigned long) & (layer_pe.sect_header[i]) > (unsigned long) layer_size)
         {
             fprintf(stderr, "WARNING: Output Parser - Bad pointer in section header %u\n", i);
             break;
