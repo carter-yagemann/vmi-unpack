@@ -132,6 +132,135 @@ bool parse_rekall_linux(linux_rekall_t *rekall, char *json_file)
         return 0;
     }
     rekall->task_struct_parent = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // task_struct->mm
+    if (!json_reader_read_member(reader, "mm"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate task_struct[1]['mm']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate task_struct[1]['mm'][0]\n");
+        return 0;
+    }
+    rekall->task_struct_mm = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // task_struct->tasks
+    if (!json_reader_read_member(reader, "tasks"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate task_struct[1]['tasks']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate task_struct[1]['tasks'][0]\n");
+        return 0;
+    }
+    rekall->task_struct_tasks = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // mm_struct->mmap
+    if (!json_reader_read_member(reader, "mm_struct"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate mm_struct\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 1))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate mm_struct[1]\n");
+        return 0;
+    }
+    if (!json_reader_read_member(reader, "mmap"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate mm_struct[1]['mmap']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate mm_struct[1]['mmap'][0]\n");
+        return 0;
+    }
+    rekall->mm_struct_mmap = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // mm_struct->pgd
+    if (!json_reader_read_member(reader, "pgd"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate mm_struct[1]['pgd']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate mm_struct[1]['pgd'][0]\n");
+        return 0;
+    }
+    rekall->mm_struct_pgd = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // vm_area_struct->vm_start
+    if (!json_reader_read_member(reader, "vm_area_struct"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 1))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct[1]\n");
+        return 0;
+    }
+    if (!json_reader_read_member(reader, "vm_start"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct[1]['vm_start']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct[1]['vm_start'][0]\n");
+        return 0;
+    }
+    rekall->vm_area_struct_vm_start = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // vm_area_struct->vm_end
+    if (!json_reader_read_member(reader, "vm_end"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct[1]['vm_end']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct[1]['vm_end'][0]\n");
+        return 0;
+    }
+    rekall->vm_area_struct_vm_end = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // vm_area_struct->vm_next
+    if (!json_reader_read_member(reader, "vm_next"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct[1]['vm_next']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate vm_area_struct[1]['vm_next'][0]\n");
+        return 0;
+    }
+    rekall->vm_area_struct_vm_next = json_reader_get_int_value(reader);
 
     g_object_unref(reader);
     g_object_unref(parser);
@@ -238,6 +367,33 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     json_reader_end_member(reader);
     json_reader_end_member(reader);
 
+    // kprocess_pdbase
+    if (!json_reader_read_member(reader, "_KPROCESS"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _KPROCESS\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 1))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _KPROCESS[1]\n");
+        return 0;
+    }
+    if (!json_reader_read_member(reader, "DirectoryTableBase"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _KPROCESS[1]['DirectoryTableBase']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _KPROCESS[1]['DirectoryTableBase'][0]\n");
+        return 0;
+    }
+    rekall->kprocess_pdbase = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
     // eprocess_pname
     if (!json_reader_read_member(reader, "_EPROCESS"))
     {
@@ -290,6 +446,105 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
         return 0;
     }
     rekall->eprocess_parent_pid = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // eprocess_tasks
+    if (!json_reader_read_member(reader, "ActiveProcessLinks"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _EPROCESS[1]['ActiveProcessLinks']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _EPROCESS[1]['ActiveProcessLinks'][0]\n");
+        return 0;
+    }
+    rekall->eprocess_tasks = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // eprocess_vadroot
+    if (!json_reader_read_member(reader, "VadRoot"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _EPROCESS[1]['VadRoot']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _EPROCESS[1]['VadRoot'][0]\n");
+        return 0;
+    }
+    rekall->eprocess_vadroot = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    // mmvad_leftchild
+    if (!json_reader_read_member(reader, "_MMVAD"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 1))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]\n");
+        return 0;
+    }
+    if (!json_reader_read_member(reader, "LeftChild"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['LeftChild']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['LeftChild'][0]\n");
+        return 0;
+    }
+    rekall->mmvad_leftchild = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    if (!json_reader_read_member(reader, "RightChild"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['RightChild']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['RightChild'][0]\n");
+        return 0;
+    }
+    rekall->mmvad_rightchild = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    if (!json_reader_read_member(reader, "StartingVpn"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['StartingVpn']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['StartingVpn'][0]\n");
+        return 0;
+    }
+    rekall->mmvad_startingvpn = json_reader_get_int_value(reader);
+    json_reader_end_member(reader);
+    json_reader_end_member(reader);
+
+    if (!json_reader_read_member(reader, "EndingVpn"))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['EndingVpn']\n");
+        return 0;
+    }
+    if (!json_reader_read_element(reader, 0))
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate _MMVAD[1]['EndingVpn'][0]\n");
+        return 0;
+    }
+    rekall->mmvad_endingvpn = json_reader_get_int_value(reader);
 
     g_object_unref(reader);
     g_object_unref(parser);

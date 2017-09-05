@@ -33,9 +33,16 @@ typedef struct
     gint64 kpcr_prcb;
     gint64 kprcb_currentthread;
     gint64 kthread_process;
+    gint64 kprocess_pdbase;
     gint64 eprocess_pname;
     gint64 eprocess_pid;
     gint64 eprocess_parent_pid;
+    gint64 eprocess_tasks;
+    gint64 eprocess_vadroot;
+    gint64 mmvad_leftchild;
+    gint64 mmvad_rightchild;
+    gint64 mmvad_startingvpn;
+    gint64 mmvad_endingvpn;
 } windows_rekall_t;
 
 typedef struct
@@ -44,6 +51,13 @@ typedef struct
     gint64 task_struct_comm;
     gint64 task_struct_pid;
     gint64 task_struct_parent;
+    gint64 task_struct_mm;
+    gint64 task_struct_tasks;
+    gint64 mm_struct_mmap;
+    gint64 mm_struct_pgd;
+    gint64 vm_area_struct_vm_start;
+    gint64 vm_area_struct_vm_end;
+    gint64 vm_area_struct_vm_next;
 } linux_rekall_t;
 
 /**

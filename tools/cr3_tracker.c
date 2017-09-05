@@ -42,7 +42,6 @@ static void close_handler(int sig)
 
 event_response_t monitor_cr3(vmi_instance_t vmi, vmi_event_t *event)
 {
-
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     vmi_pid_t parent_pid = vmi_current_parent_pid(vmi, event);
     char *name = vmi_current_name(vmi, event);
@@ -59,7 +58,6 @@ event_response_t monitor_cr3(vmi_instance_t vmi, vmi_event_t *event)
  */
 int main(int argc, char *argv[])
 {
-
     domain_name = NULL;
     char *rekall = NULL;
 

@@ -27,7 +27,6 @@
 
 int main(int argc, char *argv[])
 {
-
     if (argc < 2)
     {
         printf("%s <json_file>\n", argv[0]);
@@ -38,12 +37,16 @@ int main(int argc, char *argv[])
     if (!parse_rekall_linux(&rekall, argv[1]))
     {
         printf("Failed to parse rekall file\n");
+        return EXIT_FAILURE;
     }
     else
     {
-        printf("current_thread = %ld, comm = %ld, pid = %ld parent = %ld\n",
+        printf("current_thread = %ld, comm = %ld, pid = %ld parent = %ld, mm = %ld tasks = %ld\n",
                rekall.current_task, rekall.task_struct_comm, rekall.task_struct_pid,
-               rekall.task_struct_parent);
+               rekall.task_struct_parent, rekall.task_struct_mm, rekall.task_struct_tasks);
+        printf("mmap = %ld, vm_start = %ld, vm_end = %ld, vm_next = %ld pgd = %ld\n",
+               rekall.mm_struct_mmap, rekall.vm_area_struct_vm_start,
+               rekall.vm_area_struct_vm_end, rekall.vm_area_struct_vm_next, rekall.mm_struct_pgd);
     }
 
     return EXIT_SUCCESS;

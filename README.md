@@ -58,24 +58,25 @@ repository and run `make`.
 ./bin/unpack [options]
 
 Required arguments:
-    -d <domain_name>         name of VM to unpack from
-    -r <rekall_file>         path to rekall file
-    -o <output_dir>          directory to dump layers into
+    -d <domain_name>         Name of VM to unpack from.
+    -r <rekall_file>         Path to rekall file.
+    -o <output_dir>          Directory to dump layers into.
 
 One of the following must be provided:
-    -p <pid>                 unpack process with provided PID
-    -n <process_name>        unpack process with provided name
+    -p <pid>                 Unpack process with provided PID.
+    -n <process_name>        Unpack process with provided name.
 
 Optional arguments:
-    -f                       also follow children created by target process
+    -f                       Also follow children created by target process.
+    -i <exec_bin>            Fix layer headers based on provided executable.
+                             This image is NOT executable.
 ```
 
 ## Output
 
-The current output of VMI-Unpack is very basic. Every time the target process
-writes data to a page and then executes it, that page will be extracted as a
-layer. Layers are written to the provided output directory in the form
-`<pid>-<layer>-<rip>.bin` where `<layer>` starts at 0 and increments with each newly
-extracted layer and `<rip>` is the value of the program counter when the layer
-is first executed. This value can also be interpreted as the virtual address
-the layer starts at.
+Every time the target process writes data to a page and then executes it, the memory
+segment that page belongs to will be extracted as a layer. Layers are written to the
+provided output directory in the form `<pid>-<layer>-<rip>.bin` where `<layer>`
+starts at 0 and increments with each newly extracted layer and `<rip>` is the value
+of the program counter when the layer is first executed. This value can also be
+interpreted as the virtual address the layer starts at.

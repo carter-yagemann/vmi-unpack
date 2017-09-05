@@ -39,6 +39,7 @@ bool process_vmi_init_linux(char *rekall_filepath)
     vmi_current_pid = vmi_current_pid_linux;
     vmi_current_name = vmi_current_name_linux;
     vmi_current_parent_pid = vmi_current_parent_pid_linux;
+    vmi_current_find_segment = vmi_current_find_segment_linux;
 
     process_vmi_ready = 1;
     return 1;
@@ -56,6 +57,7 @@ bool process_vmi_init_windows(char *rekall_filepath)
     vmi_current_pid = vmi_current_pid_windows;
     vmi_current_name = vmi_current_name_windows;
     vmi_current_parent_pid = vmi_current_parent_pid_windows;
+    vmi_current_find_segment = vmi_current_find_segment_windows;
 
     process_vmi_ready = 1;
     return 1;
