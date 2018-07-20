@@ -7,6 +7,7 @@ addons:
   apt:
     packages:
       - build-essential
+      - libssl-dev
       - libglib2.0-dev
       - libjson-glib-dev
       - libxen-dev
