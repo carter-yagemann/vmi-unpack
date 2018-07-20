@@ -47,4 +47,4 @@ clean:
 .PHONY: test
 
 test:
-	gcc test/unit.c src/rekall_parser.c -Wall -I include -o test/unit `pkg-config --cflags --libs json-glib-1.0 cunit`
+	gcc test/unit.c src/rekall_parser.c -Wall -I include -o test/unit -l cunit `pkg-config --cflags --libs json-glib-1.0`
