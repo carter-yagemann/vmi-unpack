@@ -55,4 +55,3 @@ matrix:
         - cd $TRAVIS_BUILD_DIR
         - make test
         - ./test/unit
-        - exit $?
