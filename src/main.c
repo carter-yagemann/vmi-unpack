@@ -114,7 +114,7 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
 {
 
     char *name = vmi_current_name(vmi, event);
-    if (!strncmp(name, process_name, strlen(name)))
+    if (name && !strncmp(name, process_name, strlen(name)))
     {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
         monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
