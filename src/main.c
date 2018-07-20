@@ -75,7 +75,7 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t pa
     if (base_image)
         output_fix_header(buffer, dump_size, event->x86_regs->rip);
 
-    add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip);
+    add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip, vma.base_va);
 }
 
 void usage(char *name)
@@ -114,7 +114,7 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
 {
 
     char *name = vmi_current_name(vmi, event);
-    if (!strncmp(name, process_name, strlen(name)))
+    if (name && !strncmp(name, process_name, strlen(name)))
     {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
         monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);

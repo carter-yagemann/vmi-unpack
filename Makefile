@@ -20,11 +20,11 @@
 
 main:
 	mkdir -p bin
-	gcc src/*.c src/process/*.c -Wall -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+	gcc src/*.c src/process/*.c -Wall -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl`
 
 debug:
 	mkdir -p bin
-	gcc src/*.c src/process/*.c -Wall -g -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+	gcc src/*.c src/process/*.c -Wall -g -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl`
 
 .PHONY: tools
 
@@ -42,4 +42,9 @@ astyle:
 	tools/astyle/run.sh
 
 clean:
-	rm -f bin/*
+	rm -f bin/* test/unit
+
+.PHONY: test
+
+test:
+	gcc test/unit.c src/rekall_parser.c -Wall -I include -o test/unit -l cunit `pkg-config --cflags --libs json-glib-1.0`

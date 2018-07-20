@@ -1,4 +1,5 @@
 /bin
 /tools/astyle/astyle
 /tools/astyle/.*
+/test/unit
 *.swp

@@ -26,6 +26,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <glib.h>
+#include <openssl/sha.h>
 
 #include <libvmi/libvmi.h>
 
@@ -33,7 +34,6 @@
 
 char *gen_layer_filename(vmi_pid_t pid, reg_t rip)
 {
-
     uint64_t *layer_ptr;
     int dir_len = strlen(dump_output_dir);
 
@@ -59,7 +59,6 @@ char *gen_layer_filename(vmi_pid_t pid, reg_t rip)
 
 void *dump_worker_loop(void *data)
 {
-
     dump_layer_t *layer;
     FILE *ofile;
 
@@ -70,7 +69,7 @@ void *dump_worker_loop(void *data)
 
         layer = (dump_layer_t *) g_queue_pop_head(dump_queue);
 
-        if (layer->pid == 0 && layer->rip == 0 && layer->buff == NULL && layer->size == 0)
+        if (layer->pid == 0 && layer->buff == NULL)
         {
             free(layer);
             break; // signal to stop
@@ -91,7 +90,6 @@ void *dump_worker_loop(void *data)
 
 void start_dump_thread(char *dir)
 {
-
     if (dir == NULL)
     {
         fprintf(stderr, "ERROR: Dump Thread - Cannot start thread with an output dir of NULL\n");
@@ -123,9 +121,8 @@ void start_dump_thread(char *dir)
 
 void stop_dump_thread()
 {
-
     // Signal the worker that we're done by adding an empty item to its queue
-    add_to_dump_queue(NULL, 0, 0, 0);
+    add_to_dump_queue(NULL, 0, 0, 0, 0);
 
     pthread_join(dump_worker, NULL);
 
@@ -135,14 +132,20 @@ void stop_dump_thread()
     g_hash_table_destroy(pid_layer);
 }
 
-void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip)
+void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, reg_t base)
 {
+    dump_layer_t *layer;
 
-    dump_layer_t *layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
+    if (!buffer || !size)
+        return;  // Don't dump empty layers!
+
+    layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
     layer->pid = pid;
     layer->rip = rip;
+    layer->base = base;
     layer->buff = buffer;
     layer->size = size;
+    SHA256((unsigned char *) buffer, size, layer->sha256);
     g_queue_push_tail(dump_queue, layer);
 
     sem_post(&dump_sem);

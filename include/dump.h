@@ -26,6 +26,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <glib.h>
+#include <openssl/sha.h>
 
 #include <libvmi/libvmi.h>
 
@@ -39,8 +40,10 @@ typedef struct
 {
     vmi_pid_t pid;
     reg_t rip;
+    reg_t base;
     char *buff;
     uint64_t size;
+    unsigned char sha256[SHA256_DIGEST_LENGTH];
 } dump_layer_t;
 
 /**
@@ -64,7 +67,11 @@ void stop_dump_thread();
  * @param size The size of the buffer.
  * @param pid The PID of the process that executed the page.
  * @param rip The value of the RIP register when this layer was executed.
+ * @param base The base virtual address the buffer was read from.
+ *
+ * Note: The base_addr may not equal rip. For example, if the dump is an entire
+ * VMA but the instruction that triggered the dump was somewhere in the middle.
  */
-void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip);
+void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, reg_t base);
 
 #endif
