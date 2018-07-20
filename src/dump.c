@@ -134,7 +134,12 @@ void stop_dump_thread()
 
 void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, reg_t base)
 {
-    dump_layer_t *layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
+    dump_layer_t *layer;
+
+    if (!buffer || !size)
+        return;  // Don't dump empty layers!
+
+    layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
     layer->pid = pid;
     layer->rip = rip;
     layer->base = base;
