@@ -75,7 +75,7 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t pa
     if (base_image)
         output_fix_header(buffer, dump_size, event->x86_regs->rip);
 
-    add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip);
+    add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip, vma.base_va);
 }
 
 void usage(char *name)
