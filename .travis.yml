@@ -19,6 +19,7 @@ addons:
       - git
       - python
       - python-pip
+      - libcunit1-dev
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
@@ -46,3 +47,12 @@ matrix:
       script:
         - cd $TRAVIS_BUILD_DIR
         - if [[ -n $(./tools/astyle/run.sh | grep Formatted) ]]; then echo "You must run astyle before submitting a pull request"; exit -1; fi
+
+    - os: linux
+      env:
+        - TEST="CUnit"
+      script:
+        - cd $TRAVIS_BUILD_DIR
+        - make test
+        - ./test/unit
+        - exit $?

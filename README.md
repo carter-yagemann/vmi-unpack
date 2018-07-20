@@ -43,11 +43,15 @@ configured first along with a compatible hypervisor. You will also have to make
 a libVMI configuration and rekall JSON profile for the virtual machine you wish
 to perform unpacking on. Refer to both projects for more details.
 
-VMI-Unpack additionally depends on the glib-2.0, json-glib-1.0, and the standard
+VMI-Unpack additionally depends on the glib-2.0, json-glib-1.0, openssl, and the standard
 built utilities. The following is an example of how to install these
 dependencies on Debian using apt-get:
 
     sudo apt-get install build-essential libglib2.0-dev libjson-glib-dev libssl-dev
+
+For running unit tests, CUnit is also required:
+
+    sudo apt-get install libcunit1-dev
 
 Once all the dependencies are installed, simply download or clone this
 repository and run `make`.

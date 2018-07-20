@@ -42,4 +42,9 @@ astyle:
 	tools/astyle/run.sh
 
 clean:
-	rm -f bin/*
+	rm -f bin/* test/unit
+
+.PHONY: test
+
+test:
+	gcc test/unit.c src/rekall_parser.c -Wall -I include -o test/unit `pkg-config --cflags --libs json-glib-1.0 cunit`

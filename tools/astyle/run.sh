@@ -44,3 +44,5 @@ find include/ -name "*.c" -exec $ASTYLE --options=./tools/astyle/astyle.config {
 find include/ -name "*.h" -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
 
 find tools/*.c -exec $ASTYLE --options=./tools/astyle/astyle.config {} \;
+
+$ASTYLE --options=./tools/astyle/astyle.config test/unit.c
