@@ -32,9 +32,14 @@
 
 #include <dump.h>
 
-char *gen_layer_filename(vmi_pid_t pid, reg_t rip)
+#define LAYER_FILENAME_LEN 128
+
+char *gen_layer_filename(dump_layer_t *dump_layer)
 {
     uint64_t *layer_ptr;
+    vmi_pid_t pid = dump_layer->pid;
+    reg_t rip = dump_layer->rip;
+    reg_t base_addr = dump_layer->base;
     int dir_len = strlen(dump_output_dir);
 
     if (!g_hash_table_contains(pid_layer, &pid))
@@ -48,9 +53,10 @@ char *gen_layer_filename(vmi_pid_t pid, reg_t rip)
 
     layer_ptr = (uint64_t *) g_hash_table_lookup(pid_layer, &pid);
 
-    // format: <output_dir><pid>-<layer>-<rip>.bin\0
-    char *filename = (char *) malloc(dir_len + 49);
-    sprintf(filename, "%s%010d-%016lx-%016lx.bin", dump_output_dir, pid, *layer_ptr, rip);
+    // format: <output_dir>/<pid>-<layer>-<base_addr>-<rip>.bin\0
+    char *filename = (char *) malloc(dir_len + LAYER_FILENAME_LEN);
+    snprintf(filename, LAYER_FILENAME_LEN, "%s%010d-%016lx-%016lx-%016lx.bin",
+             dump_output_dir, pid, *layer_ptr, base_addr, rip);
 
     (*layer_ptr)++;
 
@@ -75,7 +81,7 @@ void *dump_worker_loop(void *data)
             break; // signal to stop
         }
 
-        char *filename = gen_layer_filename(layer->pid, layer->rip);
+        char *filename = gen_layer_filename(layer);
         ofile = fopen(filename, "wb");
         fwrite(layer->buff, sizeof(char), layer->size, ofile);
         fclose(ofile);
