@@ -168,8 +168,8 @@ def init_socket():
 
 def run_sample(filepath):
     """Run this sample through VMI-Unpack"""
-    if not args.force:
-        log.warning('Checking file type not implemented!')  # TODO - Implement
+
+    # TODO - Checking filetypes before sending samples to the client agent.
 
     shasum = sha256(open(filepath, 'rb').read()).hexdigest()
     res_dir = os.path.join(args.out_dir, shasum)
@@ -354,8 +354,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--conf', type=str, default='./example.conf',
                         help='Path to configuration (default: ./example.conf)')
-    parser.add_argument('-f', '--force', action='store_true', default=False,
-                        help='Disable checking the type of submitted samples')
     parser.add_argument('-l', '--log-level', type=int, default=20,
                         help='Logging level (10: Debug, 20: Info, 30: Warning, 40: Error, 50: Critical) (default: Info)')
     parser.add_argument('-s', '--simulate', action='store_true', default=False,
