@@ -85,7 +85,8 @@ def run_cmd(cmd, async=False, sudo=False):
         log.debug('Command: ' + ' '.join(cmd))
         child = DummyChild()
     else:
-        child = Popen(cmd)
+        fnull = open(os.devnull, 'w')
+        child = Popen(cmd, stdout=fnull, stderr=fnull)
 
     if async:
         return child
@@ -119,7 +120,8 @@ def create_xl_config(snapshot):
             if len(line) >= 4 and line[:4] == 'disk':
                 continue
             if len(line) >= 4 and line[:4] == 'name':
-                name = line.split(' ')[-1]
+                name = str(line).split(' ')[-1].strip()[1:-1]
+                log.debug("Found name: " + name)
             ofile.write(line)
     ofile.write("disk = ['tap:qcow2:" + str(snapshot) + ",hda,w']\n")
     ofile.close()
@@ -136,12 +138,13 @@ def kill_vm(name):
     if config['use_sudo']:
         cmd = ['sudo'] + cmd
 
-    res = check_output(cmd).split("\n")
+    res = check_output(cmd).split(b"\n")
 
     running = False
     for line in res:
-        log.debug(line)
-        if line.split(' ')[0] == name:
+        vm = line.split(b" ")[0].decode()
+        log.debug(vm + " =? " + name)
+        if vm == name:
             running = True
             break
 
@@ -151,6 +154,17 @@ def kill_vm(name):
     cmd = cmd[:-1] + ['destroy', name]
     log.debug('Command: ' + ' '.join(cmd))
     call(cmd)
+
+def init_socket():
+    """Initialize the socket for sending samples to the guest VM"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(config['timeout'])
+    try:
+        sock.bind((config['host_ip'], 52174))
+    except socket.error:
+        log.error("Failed to bind to port, aborting")
+        sys.exit(1)
+    return sock
 
 def run_sample(filepath):
     """Run this sample through VMI-Unpack"""
@@ -163,14 +177,14 @@ def run_sample(filepath):
         log.warning("Output directory for " + shasum + " already exists, skipping")
         return
 
-    log.info("Preparing VM")
+    log.debug("Preparing VM")
     log.debug("Creating snapshot image")
     snapshot = create_snapshot()
     log.debug("Creating snapshot XL config")
     vm_name, xl_conf = create_xl_config(snapshot)
 
-    log.info("Starting VM")
-    xl_cmd = [utils['xl'], xl_conf]
+    log.debug("Starting VM")
+    xl_cmd = [utils['xl'], 'create', xl_conf]
     if config['use_sudo']:
         res = run_cmd(xl_cmd, sudo=True)
     else:
@@ -183,13 +197,10 @@ def run_sample(filepath):
         sys.exit(1)
 
     if not args.simulate:  # Cannot simulate socket I/O
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(60)
-
-        sock.bind(config['host_ip'], 52174)
         log.info("Waiting for VM to startup")
         try:
             sock.listen(0)
+            conn, addr = sock.accept()
         except socket.timeout:
             log.error("VM did not startup within timeout, aborting")
             kill_vm(vm_name)
@@ -197,11 +208,11 @@ def run_sample(filepath):
                 os.remove(xl_conf)
             if os.path.isfile(snapshot):
                 os.remove(snapshot)
+            return
 
-        log.info("Connection from " + str(addr))
-        conn, addr = sock.accept()
+        log.debug("Connection from " + str(addr))
 
-    log.info("Starting unpacker")
+    log.debug("Starting unpacker")
     unpack_dir = tempfile.mkdtemp(prefix='vmi-output-')
     unpack_cmd = [utils['unpack'], '-d', vm_name, '-r', config['rekall'], '-o', unpack_dir, '-n', 'sample.exe', '-f']
     if config['use_sudo']:
@@ -212,11 +223,11 @@ def run_sample(filepath):
     start = datetime.now()  # Mark the beginning of unpacking time
 
     if not args.simulate:  # Cannot simulate socket I/O
-        log.info("Sending sample to client")
+        log.debug("Sending sample to client")
         with open(filepath, 'rb') as ifile:
             conn.send(ifile.read())
+        conn.shutdown(socket.SHUT_RDWR)  # So the agent knows we're done sending data
         conn.close()
-        sock.close()
 
     log.info("Running sample for " + str(config['runtime']) + " seconds")
     while (datetime.now() - start).seconds < config['runtime']:
@@ -224,18 +235,22 @@ def run_sample(filepath):
         res = unpacker.poll()
         if not res is None:
             if res == 0:
-                log.info("Unpacker exited early")
+                log.warning("Unpacker exited early")
             else:
                 log.debug("unpack exited with code " + str(res))
                 log.warning("Unpacker exited with error(s)")
             break
 
     if unpacker.poll() is None:
-        log.info("Stopping unpack")
-        unpacker.terminate()  # Sends SIGTERM, will exit gracefully
+        log.debug("Stopping unpack")
+        kill_cmd = [utils['killall'], '-9', 'unpack']
+        if config['use_sudo']:
+            run_cmd(kill_cmd, sudo=True)
+        else:
+            run_cmd(kill_cmd, sudo=False)
     kill_vm(vm_name)
 
-    log.info("Storing results")
+    log.debug("Storing results")
     if not args.simulate:  # There are no results if commands were simulated
         os.rename(unpack_dir, res_dir)
     else:
@@ -283,7 +298,7 @@ def find_utils():
     """Find all the utilities used by this script"""
     utils = dict()
 
-    for bin in ['xl', 'qemu-img']:
+    for bin in ['xl', 'qemu-img', 'killall']:
         res = lookup_bin(bin)
         if not res:
             log.error('Cannot find required program: ' + str(bin))
@@ -313,12 +328,13 @@ def parse_conf(conf_path):
         settings = {
             'host_ip':  config.get('main', 'host_ip'),
             'runtime':  config.getint('main', 'runtime'),
+            'timeout':  config.getint('main', 'timeout'),
             'use_sudo': config.getboolean('main', 'use_sudo'),
             'rekall':   config.get('main', 'rekall'),
             'xl_conf':  config.get('main', 'xl_conf'),
             'vm_img':   config.get('main', 'vm_img'),
         }
-    except NoOptionError, ValueError:
+    except (NoOptionError, ValueError) as e:
         log.error('Configuration is missing parameters. See example.conf.')
         sys.exit(1)
 
@@ -368,18 +384,25 @@ def parse_args():
 
 def main():
     """Main method"""
-    global log, args, config, utils
+    global log, args, config, utils, sock
 
     log = init_log(30)
     args = parse_args()
     log.setLevel(args.log_level)
     utils = find_utils()
     config = parse_conf(args.conf)
+    sock = init_socket()
 
     if os.path.isfile(args.sample):
         run_sample(args.sample)
     else:
         run_dir(args.sample)
+
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        log.debug("Socket already disconnected")
+    sock.close()
 
 if __name__ == '__main__':
     main()
