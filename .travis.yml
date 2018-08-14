@@ -19,6 +19,7 @@ addons:
       - git
       - python
       - python-pip
+      - python3
       - libcunit1-dev
 
 before_install:
@@ -55,3 +56,11 @@ matrix:
         - cd $TRAVIS_BUILD_DIR
         - make test
         - ./test/unit
+
+    - os: linux
+      env:
+        - TEST="Agent"
+      script:
+        - cd ${TRAVIS_BUILD_DIR}/agent
+        - python2 server.py -h
+        - python3 server.py -h
