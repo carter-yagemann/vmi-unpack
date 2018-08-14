@@ -3,3 +3,5 @@
 /tools/astyle/.*
 /test/unit
 *.swp
+/agent/*.conf
+!/agent/example.conf
