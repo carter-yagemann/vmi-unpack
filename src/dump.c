@@ -34,6 +34,21 @@
 
 #define LAYER_FILENAME_LEN 128
 
+gint compare_hashes(gconstpointer a, gconstpointer b)
+{
+    int pos;
+    unsigned char *a_ptr, *b_ptr;
+
+    a_ptr = (unsigned char *) a;
+    b_ptr = (unsigned char *) b;
+
+    for (pos = 0; pos < SHA256_DIGEST_LENGTH; pos++)
+        if (a_ptr[pos] != b_ptr[pos])
+            return 1;
+
+    return 0;
+}
+
 char *gen_layer_filename(dump_layer_t *dump_layer)
 {
     uint64_t *layer_ptr;
@@ -67,6 +82,8 @@ void *dump_worker_loop(void *data)
 {
     dump_layer_t *layer;
     FILE *ofile;
+    unsigned char *hash;
+    char *filename;
 
     while (1)
     {
@@ -81,10 +98,18 @@ void *dump_worker_loop(void *data)
             break; // signal to stop
         }
 
-        char *filename = gen_layer_filename(layer);
-        ofile = fopen(filename, "wb");
-        fwrite(layer->buff, sizeof(char), layer->size, ofile);
-        fclose(ofile);
+        // Only dump the layer if we haven't seen the hash before
+        filename = gen_layer_filename(layer);
+        if (!g_slist_find_custom(seen_hashes, layer->sha256, compare_hashes))
+        {
+            ofile = fopen(filename, "wb");
+            fwrite(layer->buff, sizeof(char), layer->size, ofile);
+            fclose(ofile);
+            // add hash to seen_hashes
+            hash = (unsigned char *) malloc(SHA256_DIGEST_LENGTH);
+            memcpy(hash, layer->sha256, SHA256_DIGEST_LENGTH);
+            seen_hashes = g_slist_prepend(seen_hashes, hash);
+        }
 
         free(filename);
         free(layer->buff);
@@ -120,6 +145,7 @@ void start_dump_thread(char *dir)
     }
     dump_queue = g_queue_new();
     pid_layer = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
+    seen_hashes = NULL;
 
     // Start worker thread
     pthread_create(&dump_worker, NULL, dump_worker_loop, NULL);
@@ -136,6 +162,7 @@ void stop_dump_thread()
     sem_destroy(&dump_sem);
     g_queue_free(dump_queue);
     g_hash_table_destroy(pid_layer);
+    g_slist_free_full(seen_hashes, free);
 }
 
 void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, reg_t base)
