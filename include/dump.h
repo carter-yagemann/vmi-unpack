@@ -35,6 +35,7 @@ char *dump_output_dir;
 sem_t dump_sem;
 GQueue *dump_queue;
 GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
+GSList *seen_hashes;
 
 typedef struct
 {
@@ -45,6 +46,16 @@ typedef struct
     uint64_t size;
     unsigned char sha256[SHA256_DIGEST_LENGTH];
 } dump_layer_t;
+
+/**
+ * Compares two SHA256 hashes.
+ *
+ * @param a The first hash to compare.
+ * @param b The second hash to compare.
+ *
+ * @return 0 if a = b, otherwise not 0.
+ */
+gint compare_hashes(gconstpointer a, gconstpointer b);
 
 /**
  * Initializes all the data structures and starts a worker thread. This must be

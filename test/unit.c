@@ -26,6 +26,9 @@
 #include <CUnit/Basic.h>
 
 #include <rekall_parser.h>
+#include <dump.h>
+
+/* REKALL */
 
 char *linux_rekall_fp = "test/inputs/linux-rekall-example.json";
 char *windows_rekall_fp = "test/inputs/windows-rekall-example.json";
@@ -80,23 +83,56 @@ void test_windows_rekall()
     CU_ASSERT(rekall.mmvad_endingvpn == 32);
 }
 
+/* DUMP */
+
+void test_compare_hashes_dump()
+{
+    // hash_a == hash_b != hash_c != hash_d
+    unsigned char hash_a[] = "AAAAAAAABBBBBBBBCCCCCCCCDDDDDDDD";
+    unsigned char hash_b[] = "AAAAAAAABBBBBBBBCCCCCCCCDDDDDDDD";
+    unsigned char hash_c[] = "AAAAAAAABBBBBBBBCCCCCCCCDDDDDDDI";
+    unsigned char hash_d[] = "IAAAAAAABBBBBBBBCCCCCCCCDDDDDDDD";
+
+    CU_ASSERT(compare_hashes(hash_a, hash_b) == 0);
+    CU_ASSERT(compare_hashes(hash_b, hash_c) != 0);
+    CU_ASSERT(compare_hashes(hash_b, hash_d) != 0);
+}
+
 int main(int argc, char *argv[])
 {
     unsigned int fails;
-    CU_pSuite pSuite = NULL;
+    CU_pSuite pSuiteRekall = NULL;
+    CU_pSuite pSuiteDump = NULL;
 
     if (CUE_SUCCESS != CU_initialize_registry())
         return CU_get_error();
 
-    pSuite = CU_add_suite("Suite_Rekall", init_rekall_suite, NULL);
-    if (!pSuite)
+    // Rekall
+
+    pSuiteRekall = CU_add_suite("Suite_Rekall", init_rekall_suite, NULL);
+    if (!pSuiteRekall)
     {
         CU_cleanup_registry();
         return CU_get_error();
     }
 
-    if (!CU_add_test(pSuite, "test linux rekall", test_linux_rekall) ||
-        !CU_add_test(pSuite, "test windows rekall", test_windows_rekall))
+    if (!CU_add_test(pSuiteRekall, "test linux rekall", test_linux_rekall) ||
+        !CU_add_test(pSuiteRekall, "test windows rekall", test_windows_rekall))
+    {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    // Dump
+
+    pSuiteDump = CU_add_suite("Suite_Dump", NULL, NULL);
+    if (!pSuiteDump)
+    {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if (!CU_add_test(pSuiteDump, "test compare hashes dump", test_compare_hashes_dump))
     {
         CU_cleanup_registry();
         return CU_get_error();

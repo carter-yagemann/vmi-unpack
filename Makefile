@@ -47,4 +47,4 @@ clean:
 .PHONY: test
 
 test:
-	gcc test/unit.c src/rekall_parser.c -Wall -I include -o test/unit -l cunit `pkg-config --cflags --libs json-glib-1.0`
+	gcc test/unit.c src/rekall_parser.c src/dump.c -Wall -I include -o test/unit -l cunit `pkg-config --cflags --libs json-glib-1.0 openssl`
