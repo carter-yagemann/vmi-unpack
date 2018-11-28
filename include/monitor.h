@@ -52,6 +52,14 @@ typedef enum
     PAGE_CAT_1GB_FRAME,
 } page_cat_t;
 
+typedef struct
+{
+    uint16_t pml4; // Index in table [0 to 511]
+    uint16_t pdpt;
+    uint16_t pd;
+    uint16_t pt;
+} table_idx_t;
+
 // args: vmi, event, pid, page category
 typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t *, vmi_pid_t, page_cat_t);
 
@@ -60,6 +68,8 @@ typedef struct
     addr_t paddr;
     vmi_pid_t pid;
     page_cat_t cat;
+    table_idx_t idx;
+    uint8_t flags;
 } pending_rescan_t;
 
 typedef struct
@@ -103,11 +113,17 @@ void monitor_destroy(vmi_instance_t vmi);
  *
  *     MONITOR_FOLLOW_CHILDREN  - If this flag is set, the monitor will also track children created
  *                                by the process.
+ *
+ *     MONITOR_HIGH_ADDRS       - If this flag is set, the monitor will track pages mapped to virtual
+ *                                addresses above 0x70000000. These pages are ignored by default because
+ *                                they typically belong to libraries, heap and stack, which is not
+ *                                relevant to capturing most packers.
  */
 void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags);
 
 #define MONITOR_FOLLOW_REMAPPING (1U << 0)
 #define MONITOR_FOLLOW_CHILDREN  (1U << 1)
+#define MONITOR_HIGH_ADDRS       (1U << 2)
 
 /**
  * Removes a registered callback.

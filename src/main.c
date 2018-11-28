@@ -95,6 +95,7 @@ void usage(char *name)
     printf("    -f                       Also follow children created by target process.\n");
     printf("    -i <exec_bin>            Fix layer headers based on provided executable.\n");
     printf("                             This image is NOT executable.\n");
+    printf("    -l                       Monitor library, heap and stack pages. By default, these are ignored.\n");
 }
 
 event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
@@ -132,7 +133,7 @@ int main(int argc, char *argv[])
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:o:p:n:fi:")) != -1)
+    while ((c = getopt(argc, argv, "d:r:o:p:n:fi:l")) != -1)
     {
         switch (c)
         {
@@ -156,6 +157,9 @@ int main(int argc, char *argv[])
                 break;
             case 'i':
                 base_image = optarg;
+            case 'l':
+                tracking_flags |= MONITOR_HIGH_ADDRS;
+                break;
             default:
                 usage(argv[0]);
                 return EXIT_FAILURE;
