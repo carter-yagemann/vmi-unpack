@@ -71,8 +71,7 @@ One of the following must be provided:
 
 Optional arguments:
     -f                       Also follow children created by target process.
-    -i <exec_bin>            Fix layer headers based on provided executable.
-                             This image is NOT executable.
+    -l                       Monitor library, heap and stack pages. By default, these are ignored.
 ```
 
 ## Output

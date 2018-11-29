@@ -30,7 +30,6 @@
 #include <dump.h>
 #include <paging/intel_64.h>
 #include <vmi/process.h>
-#include <output/output_parser.h>
 
 /* Global variables */
 char *domain_name = NULL;
@@ -39,7 +38,6 @@ char *output_dir = NULL;
 char *rekall = NULL;
 vmi_pid_t process_pid = 0;
 uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
-char *base_image = NULL;
 
 /* Signal handler */
 static int interrupted = 0;
@@ -72,9 +70,6 @@ void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t pa
 
     vmi_read_va(vmi, vma.base_va, pid, vma.size, buffer, &dump_size);
 
-    if (base_image)
-        output_fix_header(buffer, dump_size, event->x86_regs->rip);
-
     add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip, vma.base_va);
 }
 
@@ -93,8 +88,6 @@ void usage(char *name)
     printf("\n");
     printf("Optional arguments:\n");
     printf("    -f                       Also follow children created by target process.\n");
-    printf("    -i <exec_bin>            Fix layer headers based on provided executable.\n");
-    printf("                             This image is NOT executable.\n");
     printf("    -l                       Monitor library, heap and stack pages. By default, these are ignored.\n");
 }
 
@@ -133,7 +126,7 @@ int main(int argc, char *argv[])
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:o:p:n:fi:l")) != -1)
+    while ((c = getopt(argc, argv, "d:r:o:p:n:fl")) != -1)
     {
         switch (c)
         {
@@ -155,8 +148,6 @@ int main(int argc, char *argv[])
             case 'f':
                 tracking_flags |= MONITOR_FOLLOW_CHILDREN;
                 break;
-            case 'i':
-                base_image = optarg;
             case 'l':
                 tracking_flags |= MONITOR_HIGH_ADDRS;
                 break;
@@ -170,13 +161,6 @@ int main(int argc, char *argv[])
         (process_pid == 0 && process_name == NULL))
     {
         usage(argv[0]);
-        return EXIT_FAILURE;
-    }
-
-    // If a base image was provided, validate it.
-    if (base_image && !output_init_parser(base_image))
-    {
-        fprintf(stderr, "ERROR: Unpack - Unrecognized base image provided.\n");
         return EXIT_FAILURE;
     }
 
