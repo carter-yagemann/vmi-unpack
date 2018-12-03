@@ -151,10 +151,24 @@ void start_dump_thread(char *dir)
     pthread_create(&dump_worker, NULL, dump_worker_loop, NULL);
 }
 
+void add_eod()
+{
+    dump_layer_t *layer;
+
+    layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
+    layer->pid = 0;
+    layer->rip = 0;
+    layer->base = 0;
+    layer->buff = NULL;
+    layer->size = 0;
+    g_queue_push_tail(dump_queue, layer);
+
+    sem_post(&dump_sem);
+}
+
 void stop_dump_thread()
 {
-    // Signal the worker that we're done by adding an empty item to its queue
-    add_to_dump_queue(NULL, 0, 0, 0, 0);
+    add_eod();  // Signals dump worker to quit
 
     pthread_join(dump_worker, NULL);
 

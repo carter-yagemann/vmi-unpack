@@ -37,64 +37,103 @@
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
 
-addr_t monitor_idx2va(table_idx_t idx)
+int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr)
 {
-    return (addr_t)((idx.pt & 0x1FF)   << 12ULL) |
-           ((idx.pd & 0x1FF)   << 21ULL) |
-           ((idx.pdpt & 0x1FF) << 30ULL) |
-           ((idx.pml4 & 0x1FF) << 39ULL);
-}
+    mem_seg_t vma = vmi_current_find_segment(vmi, event, vaddr);
+    mem_seg_t *p_vma;
 
-table_idx_t monitor_va2idx(addr_t vaddr)
-{
-    table_idx_t idx =
+    if (!vma.size)
     {
-        .pt   = ((vaddr >> 12) & 0x1FF),
-        .pd   = ((vaddr >> 21) & 0x1FF),
-        .pdpt = ((vaddr >> 30) & 0x1FF),
-        .pml4 = ((vaddr >> 39) & 0x1FF),
-    };
+        fprintf(stderr, "WARNING: Monitor - Could not find VMA for virtual address 0x%lx\n", vaddr);
+        return 1;
+    }
 
-    return idx;
+    // Heuristic - Packers like to unpack and execute dummy layers/waves to throw off unpacking tools.
+    // For easy ones like what ASPack uses, we can try to read the whole VMA into a buffer and see how
+    // many bytes are actually read. If it's 1 page (4KB) or less, it's probably not the real program.
+    size_t dump_size;
+    char *buffer = (char *) malloc(vma.size);
+    vmi_read_va(vmi, vma.base_va, pid, vma.size, buffer, &dump_size);
+    free(buffer);
+    if (dump_size <= 0x1000)
+        return 0;
+
+    p_vma = (mem_seg_t *) g_hash_table_lookup(prev_vma, &pid);
+    if (p_vma == NULL)
+    {
+        vmi_pid_t *pid_new = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
+        mem_seg_t *vma_new = (mem_seg_t *) malloc(sizeof(mem_seg_t));
+        *pid_new = pid;
+        vma_new->base_va = vma.base_va;
+        vma_new->size = vma.size;
+        g_hash_table_insert(prev_vma, pid_new, vma_new);
+        return 1;
+    }
+
+    if (vma.base_va == p_vma->base_va && vma.size == p_vma->size)
+        return 0;
+
+    p_vma->base_va = vma.base_va;
+    p_vma->size = vma.size;
+
+    return 1;
 }
 
-void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access,
-                      vmi_pid_t pid, page_cat_t cat, table_idx_t idx, uint8_t flags)
+void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access, vmi_pid_t pid, page_cat_t cat)
 {
+    addr_t *key;
+    page_cat_t *cat_ptr;
+    vmi_pid_t *value;
+
     if (g_hash_table_contains(trapped_pages, &paddr))
         return;
 
-    if (cat == PAGE_CAT_4KB_FRAME || cat == PAGE_CAT_2MB_FRAME || cat == PAGE_CAT_1GB_FRAME)
-    {
-        addr_t vaddr = monitor_idx2va(idx);
-        if (!(flags & MONITOR_HIGH_ADDRS) && vaddr >= HIGH_ADDR_MARK)
-            return;
-    }
-
-    addr_t *key = (addr_t *) malloc(sizeof(addr_t));
-    *key = paddr;
-    vmi_pid_t *value = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
-    *value = pid;
-    page_cat_t *cat_ptr = (page_cat_t *) malloc(sizeof(uint8_t));
-    *cat_ptr = cat;
-
     vmi_set_mem_event(vmi, GFN_SHIFT(paddr), access, 0);
+
+    // update trapped pages hash table
+    key = (addr_t *) malloc(sizeof(addr_t));
+    *key = paddr;
+    cat_ptr = (page_cat_t *) malloc(sizeof(uint8_t));
+    *cat_ptr = cat;
     g_hash_table_insert(trapped_pages, key, cat_ptr);
+
+    // update physical address to PID hash table
+    key = (addr_t *) malloc(sizeof(addr_t));
+    *key = paddr;
+    value = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
+    *value = pid;
     g_hash_table_insert(page_p2pid, key, value);
 }
 
-void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid, table_idx_t idx, uint8_t flags)
+void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr)
+{
+    addr_t end_va, curr_va, curr_pa;
+    mem_seg_t vma = vmi_current_find_segment(vmi, event, vaddr);
+
+    if (!vma.size)
+    {
+        fprintf(stderr, "WARNING: Monitor - Could not find VMA for virtual address 0x%lx\n", vaddr);
+        vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
+        return;
+    }
+
+    end_va = vma.base_va + vma.size;
+    for (curr_va = vma.base_va; curr_va < end_va; curr_va += 0x1000)
+        if (VMI_SUCCESS == vmi_translate_uv2p(vmi, vaddr, pid, &curr_pa))
+            vmi_set_mem_event(vmi, GFN_SHIFT(curr_pa), VMI_MEMACCESS_N, 0);
+}
+
+void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid)
 {
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
     addr_t next_addr;
 
-    monitor_set_trap(vmi, pt, VMI_MEMACCESS_W, pid, PAGE_CAT_PT, idx, flags);
+    monitor_set_trap(vmi, pt, VMI_MEMACCESS_W, pid, PAGE_CAT_PT);
 
     for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
     {
-        idx.pt = index;
         entry_addr = pt + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
@@ -103,24 +142,23 @@ void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid, table_idx_t i
         {
             next_addr = PAGING_INTEL_64_GET_4KB_FRAME_PADDR(entry_val);
             if (next_addr <= max_paddr)
-                monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_4KB_FRAME, idx, flags);
+                monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_4KB_FRAME);
             continue;
         }
     }
 }
 
-void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid, table_idx_t idx, uint8_t flags)
+void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid)
 {
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
     addr_t next_addr;
 
-    monitor_set_trap(vmi, pd, VMI_MEMACCESS_W, pid, PAGE_CAT_PD, idx, flags);
+    monitor_set_trap(vmi, pd, VMI_MEMACCESS_W, pid, PAGE_CAT_PD);
 
     for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
     {
-        idx.pd = index;
         entry_addr = pd + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
@@ -130,31 +168,30 @@ void monitor_trap_pd(vmi_instance_t vmi, addr_t pd, vmi_pid_t pid, table_idx_t i
         {
             next_addr = PAGING_INTEL_64_GET_2MB_FRAME_PADDR(entry_val);
             if (next_addr <= max_paddr)
-                monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_2MB_FRAME, idx, flags);
+                monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_2MB_FRAME);
             continue;
         }
         if (!PAGING_INTEL_64_IS_FRAME_PTR(entry_val))
         {
             next_addr = PAGING_INTEL_64_GET_PT_PADDR(entry_val);
             if (next_addr <= max_paddr)
-                monitor_trap_pt(vmi, next_addr, pid, idx, flags);
+                monitor_trap_pt(vmi, next_addr, pid);
             continue;
         }
     }
 }
 
-void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid, table_idx_t idx, uint8_t flags)
+void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid)
 {
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
     addr_t next_addr;
 
-    monitor_set_trap(vmi, pdpt, VMI_MEMACCESS_W, pid, PAGE_CAT_PDPT, idx, flags);
+    monitor_set_trap(vmi, pdpt, VMI_MEMACCESS_W, pid, PAGE_CAT_PDPT);
 
     for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
     {
-        idx.pdpt = index;
         entry_addr = pdpt + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
@@ -164,51 +201,43 @@ void monitor_trap_pdpt(vmi_instance_t vmi, addr_t pdpt, vmi_pid_t pid, table_idx
         {
             next_addr = PAGING_INTEL_64_GET_1GB_FRAME_PADDR(entry_val);
             if (next_addr <= max_paddr)
-                monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_1GB_FRAME, idx, flags);
+                monitor_set_trap(vmi, next_addr, VMI_MEMACCESS_X, pid, PAGE_CAT_1GB_FRAME);
             continue;
         }
         if (!PAGING_INTEL_64_IS_FRAME_PTR(entry_val))
         {
             next_addr = PAGING_INTEL_64_GET_PD_PADDR(entry_val);
             if (next_addr <= max_paddr)
-                monitor_trap_pd(vmi, next_addr, pid, idx, flags);
+                monitor_trap_pd(vmi, next_addr, pid);
             continue;
         }
     }
 }
 
-void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid, table_idx_t idx, uint8_t flags)
+void monitor_trap_pml4(vmi_instance_t vmi, addr_t pml4, vmi_pid_t pid)
 {
     unsigned index;
     addr_t entry_addr;
     uint64_t entry_val;
     addr_t next_addr;
 
-    monitor_set_trap(vmi, pml4, VMI_MEMACCESS_W, pid, PAGE_CAT_PML4, idx, flags);
+    monitor_set_trap(vmi, pml4, VMI_MEMACCESS_W, pid, PAGE_CAT_PML4);
 
     for (index = 0; index < PAGING_INTEL_64_MAX_ENTRIES; index++)
     {
-        idx.pml4 = index;
         entry_addr = pml4 + PAGING_INTEL_64_GET_ENTRY_OFFSET(index);
         vmi_read_64_pa(vmi, entry_addr, &entry_val);
         if (!PAGING_INTEL_64_IS_PRESENT(entry_val))
             continue;
         next_addr = PAGING_INTEL_64_GET_PDPT_PADDR(entry_val);
         if (next_addr <= max_paddr)
-            monitor_trap_pdpt(vmi, next_addr, pid, idx, flags);
+            monitor_trap_pdpt(vmi, next_addr, pid);
     }
 }
 
-void monitor_trap_table(vmi_instance_t vmi, int pid, uint8_t flags)
+void monitor_trap_table(vmi_instance_t vmi, int pid)
 {
     addr_t dtb;
-    table_idx_t idx =
-    {
-        .pml4 = 0,
-        .pdpt = 0,
-        .pd   = 0,
-        .pt   = 0,
-    };
 
     if (pid == 0)
     {
@@ -224,17 +253,15 @@ void monitor_trap_table(vmi_instance_t vmi, int pid, uint8_t flags)
         return;
     }
 
-    monitor_trap_pml4(vmi, PAGING_INTEL_64_GET_PML4_PADDR(dtb), pid, idx, flags);
+    monitor_trap_pml4(vmi, PAGING_INTEL_64_GET_PML4_PADDR(dtb), pid);
 }
 
-void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat, table_idx_t idx, uint8_t flags)
+void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat)
 {
     pending_rescan_t *pending = (pending_rescan_t *) malloc(sizeof(pending_rescan_t));
     pending->paddr = paddr;
     pending->pid   = pid;
     pending->cat   = cat;
-    pending->idx   = idx;
-    pending->flags = flags;
 
     pending_page_rescan = g_slist_prepend(pending_page_rescan, pending);
 }
@@ -247,16 +274,16 @@ void process_pending_rescan(gpointer data, gpointer user_data)
     switch (cat)
     {
         case PAGE_CAT_PML4:
-            monitor_trap_pml4(monitor_vmi, rescan->paddr, rescan->pid, rescan->idx, rescan->flags);
+            monitor_trap_pml4(monitor_vmi, rescan->paddr, rescan->pid);
             break;
         case PAGE_CAT_PDPT:
-            monitor_trap_pdpt(monitor_vmi, rescan->paddr, rescan->pid, rescan->idx, rescan->flags);
+            monitor_trap_pdpt(monitor_vmi, rescan->paddr, rescan->pid);
             break;
         case PAGE_CAT_PD:
-            monitor_trap_pd(monitor_vmi, rescan->paddr, rescan->pid, rescan->idx, rescan->flags);
+            monitor_trap_pd(monitor_vmi, rescan->paddr, rescan->pid);
             break;
         case PAGE_CAT_PT:
-            monitor_trap_pt(monitor_vmi, rescan->paddr, rescan->pid, rescan->idx, rescan->flags);
+            monitor_trap_pt(monitor_vmi, rescan->paddr, rescan->pid);
             break;
         case PAGE_CAT_4KB_FRAME:
         case PAGE_CAT_2MB_FRAME:
@@ -379,8 +406,9 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
         if (event->mem_event.out_access & VMI_MEMACCESS_X)
         {
             if ((cb_event->flags & MONITOR_HIGH_ADDRS) || event->mem_event.gla < HIGH_ADDR_MARK)
-                cb_event->cb(vmi, event, *pid_ptr, *cat_ptr);
-            vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
+                if (check_prev_vma(vmi, event, *pid_ptr, event->mem_event.gla))
+                    cb_event->cb(vmi, event, *pid_ptr, *cat_ptr);
+            monitor_untrap_vma(vmi, event, *pid_ptr, event->mem_event.gla);
         }
         else if (event->mem_event.out_access & VMI_MEMACCESS_W)
         {
@@ -395,8 +423,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     }
     else     // page in process's page table
     {
-        table_idx_t idx = monitor_va2idx(event->mem_event.gla);
-        queue_pending_rescan(paddr, *pid_ptr, *cat_ptr, idx, cb_event->flags);
+        queue_pending_rescan(paddr, *pid_ptr, *cat_ptr);
         return (VMI_EVENT_RESPONSE_EMULATE | VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP);
     }
 }
@@ -410,9 +437,10 @@ int monitor_init(vmi_instance_t vmi)
         return 1;
     }
 
-    page_cb_events = g_hash_table_new_full(g_int_hash, g_int_equal, NULL, NULL);
-    page_p2pid = g_hash_table_new_full(g_int64_hash, g_int64_equal, NULL, NULL);
-    trapped_pages = g_hash_table_new_full(g_int64_hash, g_int64_equal, NULL, NULL);
+    page_cb_events = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
+    page_p2pid = g_hash_table_new_full(g_int64_hash, g_int64_equal, free, free);
+    trapped_pages = g_hash_table_new_full(g_int64_hash, g_int64_equal, free, free);
+    prev_vma = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
     pending_page_rescan = NULL;
     cr3_callbacks = NULL;
 
@@ -496,7 +524,7 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     cb_event->flags = flags;
     cb_event->cb = cb;
 
-    monitor_trap_table(vmi, pid, flags);
+    monitor_trap_table(vmi, pid);
 
     g_hash_table_insert(page_cb_events, cb_event_key, cb_event);
 }
