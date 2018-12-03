@@ -28,6 +28,7 @@
 
 #include <monitor.h>
 #include <dump.h>
+#include <output.h>
 #include <paging/intel_64.h>
 #include <vmi/process.h>
 
@@ -45,32 +46,6 @@ static struct sigaction action;
 static void close_handler(int sig)
 {
     interrupted = sig;
-}
-
-/**
- * Callback that's invoked when a process tries to write then execute.
- */
-void w2x_cb(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
-{
-    size_t dump_size;
-
-    mem_seg_t vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
-    if (!vma.size)
-    {
-        fprintf(stderr, "WARNING: Unpack - Could not find memory segment for virtual address 0x%lx\n", event->mem_event.gla);
-        return;
-    }
-
-    char *buffer = (char *) malloc(vma.size);
-    if (!buffer)
-    {
-        fprintf(stderr, "ERROR: Unpack - Failed to malloc buffer to dump W2X event\n");
-        return;
-    }
-
-    vmi_read_va(vmi, vma.base_va, pid, vma.size, buffer, &dump_size);
-
-    add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip, vma.base_va);
 }
 
 void usage(char *name)
@@ -97,7 +72,7 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     if (pid == process_pid)
     {
-        monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
+        monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
         monitor_remove_cr3(monitor_pid);
     }
 
@@ -111,7 +86,7 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
     if (name && !strncmp(name, process_name, strlen(name)))
     {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
-        monitor_add_page_table(vmi, pid, w2x_cb, tracking_flags);
+        monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
         monitor_remove_cr3(monitor_name);
     }
 
