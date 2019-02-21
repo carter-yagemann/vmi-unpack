@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import argparse
+import click
 import logging
 import os
 import socket
@@ -36,6 +36,14 @@ if sys.version_info.major <= 2:
     from ConfigParser import RawConfigParser, NoOptionError
 else:
     from configparser import RawConfigParser, NoOptionError
+
+
+class Args(object):
+    pass
+
+args = Args()
+log = None
+
 
 class DummyChild(object):
     """A dummy Popen object used in simulation mode"""
@@ -233,6 +241,9 @@ def init_log(level):
     logger.setLevel(level)
     return logger
 
+log = init_log(30)
+
+
 def lookup_bin(name):
     """Looks up the path to a bin using Linux environment variables. Not as
        robust as a program like which, but should be good enough."""
@@ -251,12 +262,12 @@ def find_utils():
     """Find all the utilities used by this script"""
     utils = dict()
 
-    for bin in ['qemu-img', 'killall']:
-        res = lookup_bin(bin)
+    for bin_ in ['qemu-img', 'killall']:
+        res = lookup_bin(bin_)
         if not res:
-            log.error('Cannot find required program: ' + str(bin))
+            log.error('Cannot find required program: ' + str(bin_))
             sys.exit(1)
-        utils[bin] = res
+        utils[bin_] = res
 
     # unpack is special because its apart of this project so we'll try looking
     # in a few places for it along with PATH.
@@ -272,10 +283,10 @@ def find_utils():
 
     return utils
 
-def parse_conf(conf_path):
+def parse_conf(conf_fd):
     """Parse configuration file"""
     config = RawConfigParser()
-    config.read(conf_path)
+    config.readfp(conf_fd)
 
     try:
         settings = {
@@ -302,52 +313,42 @@ def parse_conf(conf_path):
 
     return settings
 
-def parse_args():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--conf', type=str, default='./example.conf',
-                        help='Path to configuration (default: ./example.conf)')
-    parser.add_argument('-l', '--log-level', type=int, default=20,
-                        help='Logging level (10: Debug, 20: Info, 30: Warning, 40: Error, 50: Critical) (default: Info)')
-    parser.add_argument('-s', '--simulate', action='store_true', default=False,
-                        help='Show commands that would run (logged at debug level) instead of actually running them')
-    parser.add_argument('sample', type=str,
-                        help='Path to sample file or directory of samples to unpack')
-    parser.add_argument('out_dir', type=str,
-                        help='Directory to save results in')
 
-    args = parser.parse_args()
-
-    errors = False
-    if not os.path.isfile(args.conf):
-        log.error('Cannot find file: ' + str(args.conf))
-        errors = True
-    if not os.path.exists(args.sample):
-        log.error('Does not exist: ' + str(args.sample))
-        errors = True
-    if not os.path.isdir(args.out_dir):
-        log.error("Cannot find directory: " + str(args.out_dir))
-        errors = True
-    if errors:
-        sys.exit(1)
-
-    return args
-
-def main():
+@click.command()
+@click.option('-c', '--conf', type=click.File('r'), default='./example.conf',
+              help='Path to configuration (default: ./example.conf)')
+@click.option('-l', '--log-level', 'loglevel', type=click.Choice([10,20,30,40,50]), default=20,
+              help='Logging level (10: Debug, 20: Info, 30: Warning, '
+              '40: Error, 50: Critical) (default: Info)')
+@click.option('--dry-run', 'simulate', is_flag=True,
+              help='Show commands that would run (logged at debug level) '
+              'instead of actually running them')
+@click.option('-o', '--outdir', type=click.Path(), required=True,
+              help='Path to store all output data and logs')
+@click.option('-s', '--sample', type=click.File('rb'), required=True,
+              help='Path to sample executable file to unpack')
+#@click.option('-d', '--domain', type=str, required=True,
+#              help='The name of the VM domain to use')
+#@click.option('-i', '--ip', type=str, required=True,
+#              help='The IPv4/IPv6 address of the VM guest OS')
+#@click.option('-r', '--rekall', type=click.File('r'), required=True,
+#              help='Path to rekall file that describes VM guest memory structures (OS specific)')
+def main(conf, loglevel, simulate, outdir, sample):  # , domain, ip, rekall):
     """Main method"""
-    global log, args, config, utils, sock
+    global args, config, utils, sock
 
-    log = init_log(30)
-    args = parse_args()
+    args.conf = conf
+    args.log_level = loglevel
+    args.simulate = simulate
+    args.out_dir = outdir
+    args.sample = sample
+
     log.setLevel(args.log_level)
     config = parse_conf(args.conf)
     utils = find_utils()
     sock = init_socket()
 
-    if os.path.isfile(args.sample):
-        run_sample(args.sample)
-    else:
-        run_dir(args.sample)
+    run_sample(args.sample)
 
     try:
         sock.shutdown(socket.SHUT_RDWR)
