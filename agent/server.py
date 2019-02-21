@@ -29,6 +29,7 @@ import sys
 import tempfile
 from datetime import datetime
 from hashlib import sha256
+import libvirt
 from subprocess import Popen, call, check_output
 from time import sleep
 if sys.version_info.major <= 2:
@@ -108,53 +109,6 @@ def create_snapshot():
 
     return tmp[1]
 
-def create_xl_config(snapshot):
-    """Creates a XL config based on the provided config with the HDD changed
-       to the snapshot image."""
-    tmp = tempfile.mkstemp(prefix='vmi-xl-')
-    ofile = os.fdopen(tmp[0], 'w')
-    name = ''
-
-    with open(config['xl_conf']) as ifile:
-        for line in ifile:
-            if len(line) >= 4 and line[:4] == 'disk':
-                continue
-            if len(line) >= 4 and line[:4] == 'name':
-                name = str(line).split(' ')[-1].strip()[1:-1]
-                log.debug("Found name: " + name)
-            ofile.write(line)
-    ofile.write("disk = ['tap:qcow2:" + str(snapshot) + ",hda,w']\n")
-    ofile.close()
-
-    return (name, tmp[1])
-
-def kill_vm(name):
-    """Checks XL and if a VM by the provided name is running, it's destroyed.
-
-    This process is special, so it doesn't use the run_cmd wrapper, but it's
-    still simulate safe.
-    """
-    cmd = [utils['xl'], 'list']
-    if config['use_sudo']:
-        cmd = ['sudo'] + cmd
-
-    res = check_output(cmd).split(b"\n")
-
-    running = False
-    for line in res:
-        vm = line.split(b" ")[0].decode()
-        log.debug(vm + " =? " + name)
-        if vm == name:
-            running = True
-            break
-
-    if not running:
-        return
-
-    cmd = cmd[:-1] + ['destroy', name]
-    log.debug('Command: ' + ' '.join(cmd))
-    call(cmd)
-
 def init_socket():
     """Initialize the socket for sending samples to the guest VM"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -180,20 +134,21 @@ def run_sample(filepath):
     log.debug("Preparing VM")
     log.debug("Creating snapshot image")
     snapshot = create_snapshot()
-    log.debug("Creating snapshot XL config")
-    vm_name, xl_conf = create_xl_config(snapshot)
 
     log.debug("Starting VM")
-    xl_cmd = [utils['xl'], 'create', xl_conf]
-    if config['use_sudo']:
-        res = run_cmd(xl_cmd, sudo=True)
-    else:
-        res = run_cmd(xl_cmd, sudo=False)
-    if res != 0:
-        log.debug("xl returned " + str(res))
-        log.info("Failed to start VM")
-        os.remove(xl_conf)
+    xen = libvirt.open('xen:///system')
+    if xen == None:
+        print('Failed to open connection to xen:///system',
+              file=sys.stderr)
         os.remove(snapshot)
+        sys.exit(1)
+    xmlconfig = open(config['xml_conf'], 'r')
+    guest = xen.createXML(xmlconfig, 0)
+    if guest == None:
+        print('Failed to create a domain from XML definition',
+              file=sys.stderr)
+        os.remove(snapshot)
+        xen.close()
         sys.exit(1)
 
     if not args.simulate:  # Cannot simulate socket I/O
@@ -203,11 +158,10 @@ def run_sample(filepath):
             conn, addr = sock.accept()
         except socket.timeout:
             log.error("VM did not startup within timeout, aborting")
-            kill_vm(vm_name)
-            if os.path.isfile(xl_conf):
-                os.remove(xl_conf)
+            guest.destroy()
             if os.path.isfile(snapshot):
                 os.remove(snapshot)
+            xen.close()
             return
 
         log.debug("Connection from " + str(addr))
@@ -248,7 +202,7 @@ def run_sample(filepath):
             run_cmd(kill_cmd, sudo=True)
         else:
             run_cmd(kill_cmd, sudo=False)
-    kill_vm(vm_name)
+    guest.destroy()
 
     log.debug("Storing results")
     if not args.simulate:  # There are no results if commands were simulated
@@ -256,10 +210,9 @@ def run_sample(filepath):
     else:
         os.rmdir(unpack_dir)
 
-    if os.path.isfile(xl_conf):
-        os.remove(xl_conf)
     if os.path.isfile(snapshot):
         os.remove(snapshot)
+    xen.close()
 
 def run_dir(dirpath):
     """Run samples in the provided directory"""
@@ -298,7 +251,7 @@ def find_utils():
     """Find all the utilities used by this script"""
     utils = dict()
 
-    for bin in ['xl', 'qemu-img', 'killall']:
+    for bin in ['qemu-img', 'killall']:
         res = lookup_bin(bin)
         if not res:
             log.error('Cannot find required program: ' + str(bin))
@@ -387,8 +340,8 @@ def main():
     log = init_log(30)
     args = parse_args()
     log.setLevel(args.log_level)
-    utils = find_utils()
     config = parse_conf(args.conf)
+    utils = find_utils()
     sock = init_socket()
 
     if os.path.isfile(args.sample):
