@@ -50,6 +50,6 @@ void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_c
     }
 
     vmi_read_va(vmi, vma.base_va, pid, vma.size, buffer, &dump_size);
-
+    printf("Dumping section: base_va: %p, size: %zu\n", (void *)(vma.base_va), vma.size);
     add_to_dump_queue(buffer, dump_size, pid, event->x86_regs->rip, vma.base_va);
 }

@@ -117,6 +117,11 @@ void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, a
         return;
     }
 
+    // todo: vmi_pid_to_dtb if VMI_FAILURE :: clear all events for this pid
+    // remove pid from global list of pids
+    // remove all events for pids
+    // if no more pids, bail out
+
     end_va = vma.base_va + vma.size;
     for (curr_va = vma.base_va; curr_va < end_va; curr_va += 0x1000)
         if (VMI_SUCCESS == vmi_translate_uv2p(vmi, vaddr, pid, &curr_pa))
@@ -245,7 +250,9 @@ void monitor_trap_table(vmi_instance_t vmi, int pid)
         return;
     }
 
-    vmi_pid_to_dtb(vmi, (vmi_pid_t) pid, &dtb);
+    if (vmi_pid_to_dtb(vmi, (vmi_pid_t) pid, &dtb) == VMI_FAILURE) {
+        return;
+    }
 
     if (dtb == 0)
     {
@@ -520,7 +527,12 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     *cb_event_key = pid;
     page_cb_event_t *cb_event = (page_cb_event_t *) malloc(sizeof(page_cb_event_t));
     cb_event->pid = pid;
-    vmi_pid_to_dtb(vmi, pid, &cb_event->cr3);
+    if (vmi_pid_to_dtb(vmi, pid, &cb_event->cr3) == VMI_FAILURE) {
+        free(cb_event_key);
+        free(cb_event);
+
+        return;
+    }
     cb_event->flags = flags;
     cb_event->cb = cb;
 
