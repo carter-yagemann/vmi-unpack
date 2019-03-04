@@ -29,18 +29,24 @@
 #include <libvmi/libvmi.h>
 #include <libvmi/events.h>
 
+typedef struct {
+  GSList *all_events;
+  GHashTable *write_exec_map;
+} pid_events_t;
+
 addr_t max_paddr;
 bool page_table_monitor_init;
 vmi_instance_t monitor_vmi;
 vmi_event_t page_table_monitor_event;
 vmi_event_t page_table_monitor_ss;
 vmi_event_t page_table_monitor_cr3;
-GHashTable *page_cb_events;  // key: vmi_pid_t, value: page_cb_event_t
-GHashTable *page_p2pid;      // key: addr_t (4KB aligned), value: vmi_pid_t
-GHashTable *trapped_pages;   // key: addr_t, value: uint8_t (page type)
-GHashTable *prev_vma;        // key: vmi_pid_t, value: mem_seg_t
-GSList *pending_page_rescan; // queue of table rescans
-GSList *cr3_callbacks;       // list of CR3 write callbacks
+GHashTable *page_cb_events;    // key: vmi_pid_t, value: page_cb_event_t
+GHashTable *page_p2pid;        // key: addr_t (4KB aligned), value: vmi_pid_t
+GHashTable *trapped_pages;     // key: addr_t, value: uint8_t (page type)
+GHashTable *prev_vma;          // key: vmi_pid_t, value: mem_seg_t
+GHashTable *vmi_events_by_pid; // key: vmi_pid_t, value: pid_events_t
+GSList *pending_page_rescan;   // queue of table rescans
+GSList *cr3_callbacks;         // list of CR3 write callbacks
 
 typedef enum
 {

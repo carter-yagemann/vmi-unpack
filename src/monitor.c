@@ -107,7 +107,7 @@ void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access,
 
 void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr)
 {
-    addr_t end_va, curr_va, curr_pa;
+    addr_t end_va, curr_va, curr_pa, dtb;
     mem_seg_t vma = vmi_current_find_segment(vmi, event, vaddr);
 
     if (!vma.size)
@@ -118,9 +118,16 @@ void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, a
     }
 
     // todo: vmi_pid_to_dtb if VMI_FAILURE :: clear all events for this pid
-    // remove pid from global list of pids
-    // remove all events for pids
-    // if no more pids, bail out
+    if (vmi_pid_to_dtb(vmi, pid, &dtb) == VMI_FAILURE) {
+        // clear all events for `pid`
+
+        // remove pid from global list of pids
+        g_hash_table_remove(vmi_events_by_pid, GINT_TO_POINTER(pid));
+
+        // remove all events for pids
+
+        // if no more pids, bail out
+    }
 
     end_va = vma.base_va + vma.size;
     for (curr_va = vma.base_va; curr_va < end_va; curr_va += 0x1000)
@@ -324,9 +331,16 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
             page_table_monitor_cb_t cb = cb_event->cb;
             uint8_t cb_flags = cb_event->flags;
             monitor_remove_page_table(vmi, pid);
+            if (g_hash_table_contains(vmi_events_by_pid, GINT_TO_POINTER(pid))) {
+	            g_hash_table_remove(vmi_events_by_pid, GINT_TO_POINTER(pid));
+	            printf("*********** REMOVED PID %d\n *****", pid);
+            }
 
-            if (cb_flags & MONITOR_FOLLOW_REMAPPING)
+            if (cb_flags & MONITOR_FOLLOW_REMAPPING) {
+	            g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
                 monitor_add_page_table(vmi, pid, cb, cb_flags);
+	            printf("*********** ADDED PID %d\n *****", pid);
+            }
         }
 
         return VMI_EVENT_RESPONSE_NONE;
@@ -339,9 +353,27 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 
     if (parent_cb_event != NULL && (parent_cb_event->flags & MONITOR_FOLLOW_CHILDREN))
     {
+        g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
         monitor_add_page_table(vmi, pid, parent_cb_event->cb, parent_cb_event->flags);
+        printf("*********** ADDED PID %d\n *****", pid);
         return VMI_EVENT_RESPONSE_NONE;
     }
+
+    // Iterater over `vmi_events_by_pid` and check if any of our
+    // watched processes have exited. If so, remove them.
+
+    vmi_pidcache_flush(vmi);
+    GHashTableIter iter;
+    addr_t temp_dtb;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, vmi_events_by_pid);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+	    if (vmi_pid_to_dtb(vmi, GPOINTER_TO_INT(key), &temp_dtb) != VMI_SUCCESS) {
+		    g_hash_table_remove(vmi_events_by_pid, key);
+		    printf("****** REMOVED DEAD PROCESS ******\n");
+        }
+    }
+
 
     return VMI_EVENT_RESPONSE_NONE;
 }
@@ -448,6 +480,7 @@ int monitor_init(vmi_instance_t vmi)
     page_p2pid = g_hash_table_new_full(g_int64_hash, g_int64_equal, free, free);
     trapped_pages = g_hash_table_new_full(g_int64_hash, g_int64_equal, free, free);
     prev_vma = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
+    vmi_events_by_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
     pending_page_rescan = NULL;
     cr3_callbacks = NULL;
 
@@ -499,6 +532,7 @@ void monitor_destroy(vmi_instance_t vmi)
     g_hash_table_destroy(page_cb_events);
     g_hash_table_destroy(page_p2pid);
     g_hash_table_destroy(trapped_pages);
+    g_hash_table_destroy(vmi_events_by_pid);
 
     page_table_monitor_init = 0;
 }

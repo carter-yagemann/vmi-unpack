@@ -72,6 +72,7 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     if (pid == process_pid)
     {
+        g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
         monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
         monitor_remove_cr3(monitor_pid);
     }
@@ -86,6 +87,8 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
     if (name && !strncmp(name, process_name, strlen(name)))
     {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
+        g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
+        process_pid = vmi_current_pid(vmi, event);
         monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
         monitor_remove_cr3(monitor_name);
     }
@@ -197,6 +200,13 @@ int main(int argc, char *argv[])
         {
             fprintf(stderr, "ERROR: libVMI - Unexpected error while waiting for VMI events, quitting.\n");
             interrupted = 1;
+        }
+
+        // Exit if all our watched processes have exited
+        if (process_pid) {
+	        if (g_hash_table_size(vmi_events_by_pid) == 0) {
+		        interrupted = 1;
+	        }
         }
     }
 
