@@ -93,7 +93,7 @@ void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access,
     // update trapped pages hash table
     key = (addr_t *) malloc(sizeof(addr_t));
     *key = paddr;
-    cat_ptr = (page_cat_t *) malloc(sizeof(uint8_t));
+    cat_ptr = (page_cat_t *) malloc(sizeof(page_cat_t));
     *cat_ptr = cat;
     g_hash_table_insert(trapped_pages, key, cat_ptr);
 
@@ -333,13 +333,11 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
             monitor_remove_page_table(vmi, pid);
             if (g_hash_table_contains(vmi_events_by_pid, GINT_TO_POINTER(pid))) {
 	            g_hash_table_remove(vmi_events_by_pid, GINT_TO_POINTER(pid));
-	            printf("*********** REMOVED PID %d\n *****", pid);
             }
 
             if (cb_flags & MONITOR_FOLLOW_REMAPPING) {
 	            g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
                 monitor_add_page_table(vmi, pid, cb, cb_flags);
-	            printf("*********** ADDED PID %d\n *****", pid);
             }
         }
 
@@ -355,7 +353,7 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
     {
         g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
         monitor_add_page_table(vmi, pid, parent_cb_event->cb, parent_cb_event->flags);
-        printf("*********** ADDED PID %d\n *****", pid);
+        printf("*********** FOUND CHILD: PID %d *****\n", pid);
         return VMI_EVENT_RESPONSE_NONE;
     }
 
@@ -388,6 +386,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
 {
     addr_t paddr = PADDR_SHIFT(event->mem_event.gfn);
     vmi_pid_t *pid_ptr = (vmi_pid_t *) g_hash_table_lookup(page_p2pid, &paddr);
+    vmi_pid_t pid;
 
     if (pid_ptr == NULL)
     {
@@ -396,12 +395,14 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
         return VMI_EVENT_RESPONSE_NONE;
     }
 
+    pid = *pid_ptr;
+
     vmi_pid_t curr_pid = vmi_current_pid(vmi, event);
 
     // If the PID of the current process is greater than the PID retrieved from page_p2pid,
     // most likely the page was freed and then claimed by the current process. In other
     // words, the page_p2pid value is stale.
-    if (curr_pid > *pid_ptr)
+    if (curr_pid > pid)
     {
         if (g_hash_table_contains(page_cb_events, &curr_pid))
         {
@@ -413,7 +414,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
 
             g_hash_table_insert(page_p2pid, new_paddr, new_pid);
 
-            *pid_ptr = curr_pid;
+            pid = curr_pid;
         }
         else
         {
@@ -422,11 +423,11 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
         }
     }
 
-    page_cb_event_t *cb_event = (page_cb_event_t *) g_hash_table_lookup(page_cb_events, pid_ptr);
+    page_cb_event_t *cb_event = (page_cb_event_t *) g_hash_table_lookup(page_cb_events, &pid);
 
     if (cb_event == NULL)
     {
-        fprintf(stderr, "WARNING: Monitor - Failed to find callback event for PID %d\n", *pid_ptr);
+        fprintf(stderr, "WARNING: Monitor - Failed to find callback event for PID %d\n", pid);
         vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         return VMI_EVENT_RESPONSE_NONE;
     }
@@ -445,9 +446,9 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
         if (event->mem_event.out_access & VMI_MEMACCESS_X)
         {
             if ((cb_event->flags & MONITOR_HIGH_ADDRS) || event->mem_event.gla < HIGH_ADDR_MARK)
-                if (check_prev_vma(vmi, event, *pid_ptr, event->mem_event.gla))
-                    cb_event->cb(vmi, event, *pid_ptr, *cat_ptr);
-            monitor_untrap_vma(vmi, event, *pid_ptr, event->mem_event.gla);
+                if (check_prev_vma(vmi, event, pid, event->mem_event.gla))
+                    cb_event->cb(vmi, event, pid, *cat_ptr);
+            monitor_untrap_vma(vmi, event, pid, event->mem_event.gla);
         }
         else if (event->mem_event.out_access & VMI_MEMACCESS_W)
         {
@@ -462,7 +463,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     }
     else     // page in process's page table
     {
-        queue_pending_rescan(paddr, *pid_ptr, *cat_ptr);
+        queue_pending_rescan(paddr, pid, *cat_ptr);
         return (VMI_EVENT_RESPONSE_EMULATE | VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP);
     }
 }
@@ -561,7 +562,9 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     *cb_event_key = pid;
     page_cb_event_t *cb_event = (page_cb_event_t *) malloc(sizeof(page_cb_event_t));
     cb_event->pid = pid;
+    printf("***** ABOUT TO CHECK PT FOR PID %d ******\n", pid);
     if (vmi_pid_to_dtb(vmi, pid, &cb_event->cr3) == VMI_FAILURE) {
+	    printf("***** OOPS ******\n");
         free(cb_event_key);
         free(cb_event);
 
