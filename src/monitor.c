@@ -105,34 +105,66 @@ void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access,
     g_hash_table_insert(page_p2pid, key, value);
 }
 
-void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr)
+void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem_seg_t vma)
 {
     addr_t end_va, curr_va, curr_pa, dtb;
-    mem_seg_t vma = vmi_current_find_segment(vmi, event, vaddr);
+    GHashTable *my_pid_events, *exec_map;
 
     if (!vma.size)
     {
-        fprintf(stderr, "WARNING: Monitor - Could not find VMA for virtual address 0x%lx\n", vaddr);
+        fprintf(stderr, "WARNING: Monitor - Could not find VMA for virtual address 0x%lx\n", event->mem_event.gla);
         vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         return;
     }
-
-    // todo: vmi_pid_to_dtb if VMI_FAILURE :: clear all events for this pid
-    if (vmi_pid_to_dtb(vmi, pid, &dtb) == VMI_FAILURE) {
-        // clear all events for `pid`
-
-        // remove pid from global list of pids
-        g_hash_table_remove(vmi_events_by_pid, GINT_TO_POINTER(pid));
-
-        // remove all events for pids
-
-        // if no more pids, bail out
+    my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
+    if (!my_pid_events) {
+      fprintf(stderr, "WARNING: Monitor - Could not PID %d\n", pid);
+      return;
     }
+    exec_map = g_hash_table_lookup(my_pid_events->write_exec_map, vma.base_va);
+    if (!exec_map) {
+      return;
+    }
+    guint num_pages = 0;
+    gpointer *pages = g_hash_table_get_keys_as_array(exec_map, &num_pages);
+    if (pages) {
+      for (int i = 0; i < num_pages; i++) {
+        vmi_set_mem_event(vmi, pages[i], VMI_MEMACCESS_W, 0);
+    }
+    g_free(pages);
+}
 
-    end_va = vma.base_va + vma.size;
-    for (curr_va = vma.base_va; curr_va < end_va; curr_va += 0x1000)
-        if (VMI_SUCCESS == vmi_translate_uv2p(vmi, vaddr, pid, &curr_pa))
-            vmi_set_mem_event(vmi, GFN_SHIFT(curr_pa), VMI_MEMACCESS_N, 0);
+void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem_seg_t vma)
+{
+  if (!vma.size) return;
+  GHashTable *my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
+  if (my_pid_events) {
+    GHashTable *exec_map = g_hash_table_lookup(my_pid_events->write_exec_map, vma.base_va); 
+    if (!exec_map) {
+      exec_map = g_hash_table_new(g_direct_hash, g_direct_equal);
+    }
+    g_hash_table_add(exec_map, event->mem_event.gfn);
+    vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);
+  }
+}
+
+//called by g_hash_table_destroy() when g_hash_table_new_full() is used
+void destroy_watched_pid(gpointer val) {
+  g_hash_table_destroy(val->write_exec_map);
+  g_slice_free(val);
+}
+
+pid_events_t* add_new_pid(vmi_pid_t pid) {
+  pid_events_t* pval;
+  if (pval = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid)))
+    //skip if the pid already exists
+    return pval;
+  pval = g_slice_new(pid_events_t);
+  pval->all_events = NULL;
+  pval->write_exec_map = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+      NULL, g_hash_table_destroy);
+  g_hash_table_insert(vmi_events_by_pid, GINT_TO_POINTER(pid), pval);
+  return pval;
 }
 
 void monitor_trap_pt(vmi_instance_t vmi, addr_t pt, vmi_pid_t pid)
@@ -351,7 +383,7 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 
     if (parent_cb_event != NULL && (parent_cb_event->flags & MONITOR_FOLLOW_CHILDREN))
     {
-        g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
+        add_new_pid(pid);
         monitor_add_page_table(vmi, pid, parent_cb_event->cb, parent_cb_event->flags);
         printf("*********** FOUND CHILD: PID %d *****\n", pid);
         return VMI_EVENT_RESPONSE_NONE;
@@ -443,16 +475,17 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
 
     if (*cat_ptr == PAGE_CAT_4KB_FRAME || *cat_ptr == PAGE_CAT_2MB_FRAME || *cat_ptr == PAGE_CAT_1GB_FRAME)
     {
+      mem_seg_t vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
         if (event->mem_event.out_access & VMI_MEMACCESS_X)
         {
             if ((cb_event->flags & MONITOR_HIGH_ADDRS) || event->mem_event.gla < HIGH_ADDR_MARK)
                 if (check_prev_vma(vmi, event, pid, event->mem_event.gla))
                     cb_event->cb(vmi, event, pid, *cat_ptr);
-            monitor_untrap_vma(vmi, event, pid, event->mem_event.gla);
+            monitor_untrap_vma(vmi, event, pid, vma);
         }
         else if (event->mem_event.out_access & VMI_MEMACCESS_W)
         {
-            vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);
+            monitor_trap_vma(vmi, event, pid, vma);
         }
         else
         {
@@ -481,7 +514,8 @@ int monitor_init(vmi_instance_t vmi)
     page_p2pid = g_hash_table_new_full(g_int64_hash, g_int64_equal, free, free);
     trapped_pages = g_hash_table_new_full(g_int64_hash, g_int64_equal, free, free);
     prev_vma = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
-    vmi_events_by_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+    vmi_events_by_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal,
+        NULL, destroy_watched_pid);
     pending_page_rescan = NULL;
     cr3_callbacks = NULL;
 
