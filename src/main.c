@@ -204,9 +204,9 @@ int main(int argc, char *argv[])
 
         // Exit if all our watched processes have exited
         if (process_pid) {
-	        if (g_hash_table_size(vmi_events_by_pid) == 0) {
-		        interrupted = 1;
-	        }
+            if (g_hash_table_size(vmi_events_by_pid) == 0) {
+                interrupted = 1;
+            }
         }
     }
 

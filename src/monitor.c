@@ -332,11 +332,11 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
             uint8_t cb_flags = cb_event->flags;
             monitor_remove_page_table(vmi, pid);
             if (g_hash_table_contains(vmi_events_by_pid, GINT_TO_POINTER(pid))) {
-	            g_hash_table_remove(vmi_events_by_pid, GINT_TO_POINTER(pid));
+                g_hash_table_remove(vmi_events_by_pid, GINT_TO_POINTER(pid));
             }
 
             if (cb_flags & MONITOR_FOLLOW_REMAPPING) {
-	            g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
+                g_hash_table_add(vmi_events_by_pid, GINT_TO_POINTER(pid));
                 monitor_add_page_table(vmi, pid, cb, cb_flags);
             }
         }
@@ -366,9 +366,9 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
     gpointer key, value;
     g_hash_table_iter_init(&iter, vmi_events_by_pid);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-	    if (vmi_pid_to_dtb(vmi, GPOINTER_TO_INT(key), &temp_dtb) != VMI_SUCCESS) {
-		    g_hash_table_remove(vmi_events_by_pid, key);
-		    printf("****** REMOVED DEAD PROCESS ******\n");
+        if (vmi_pid_to_dtb(vmi, GPOINTER_TO_INT(key), &temp_dtb) != VMI_SUCCESS) {
+            g_hash_table_remove(vmi_events_by_pid, key);
+            printf("****** REMOVED DEAD PROCESS ******\n");
         }
     }
 
@@ -562,9 +562,7 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     *cb_event_key = pid;
     page_cb_event_t *cb_event = (page_cb_event_t *) malloc(sizeof(page_cb_event_t));
     cb_event->pid = pid;
-    printf("***** ABOUT TO CHECK PT FOR PID %d ******\n", pid);
     if (vmi_pid_to_dtb(vmi, pid, &cb_event->cr3) == VMI_FAILURE) {
-	    printf("***** OOPS ******\n");
         free(cb_event_key);
         free(cb_event);
 
