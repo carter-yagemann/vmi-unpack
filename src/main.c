@@ -43,6 +43,7 @@ uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
 /* Signal handler */
 static int interrupted = 0;
 static struct sigaction action;
+static sigset_t my_sigs;
 static void close_handler(int sig)
 {
     interrupted = sig;
@@ -143,7 +144,20 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Register signal handler.
+    // setup signal mask for worker threads, who will not be handling any signals
+    sigemptyset(&my_sigs);
+    sigaddset(&my_sigs, SIGTERM);
+    sigaddset(&my_sigs, SIGHUP);
+    sigaddset(&my_sigs, SIGINT);
+    sigaddset(&my_sigs, SIGALRM);
+    // block these signals in main thread and other threads
+    pthread_sigmask(SIG_BLOCK, &my_sigs, NULL);
+
+    // start all child threads below
+    start_dump_thread(output_dir);
+    // end child thread creation
+
+    // Register signal handler. only main thread will handle them.
     action.sa_handler = close_handler;
     action.sa_flags = 0;
     sigemptyset(&action.sa_mask);
@@ -182,7 +196,6 @@ int main(int argc, char *argv[])
     }
 
     // Initialize various helper methods
-    start_dump_thread(output_dir);
     if (!process_vmi_init(vmi, rekall))
     {
         fprintf(stderr, "ERROR: Unpack - Failed to initialize process VMI\n");
