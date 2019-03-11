@@ -77,6 +77,8 @@ typedef struct
     page_table_monitor_cb_t cb;
 } page_cb_event_t;
 
+pid_events_t* add_new_pid(vmi_pid_t pid);
+
 /**
  * Initializes the page table monitor.
  *

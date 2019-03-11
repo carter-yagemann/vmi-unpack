@@ -100,8 +100,10 @@ void *dump_worker_loop(void *data)
 
         // Only dump the layer if we haven't seen the hash before
         filename = gen_layer_filename(layer);
+        printf("dump_worker_loop: considering dump of %s\n", filename);
         if (!g_slist_find_custom(seen_hashes, layer->sha256, compare_hashes))
         {
+            printf("dump_worker_loop: starting dump of %s\n", filename);
             ofile = fopen(filename, "wb");
             fwrite(layer->buff, sizeof(char), layer->size, ofile);
             fclose(ofile);
@@ -109,6 +111,7 @@ void *dump_worker_loop(void *data)
             hash = (unsigned char *) malloc(SHA256_DIGEST_LENGTH);
             memcpy(hash, layer->sha256, SHA256_DIGEST_LENGTH);
             seen_hashes = g_slist_prepend(seen_hashes, hash);
+            printf("dump_worker_loop: finished dump of %s\n", filename);
         }
 
         free(filename);
