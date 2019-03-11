@@ -29,20 +29,13 @@
 #include <libvmi/libvmi.h>
 #include <libvmi/events.h>
 
-typedef struct {
-  GSList *all_events;
-  GHashTable *write_exec_map;
-} pid_events_t;
-
 addr_t max_paddr;
 bool page_table_monitor_init;
 vmi_instance_t monitor_vmi;
 vmi_event_t page_table_monitor_event;
 vmi_event_t page_table_monitor_ss;
 vmi_event_t page_table_monitor_cr3;
-GHashTable *page_cb_events;    // key: vmi_pid_t, value: page_cb_event_t
-GHashTable *page_p2pid;        // key: addr_t (4KB aligned), value: vmi_pid_t
-GHashTable *trapped_pages;     // key: addr_t, value: uint8_t (page type)
+GHashTable *trapped_pages;     // key: addr_t, value: page_attr_t
 GHashTable *prev_vma;          // key: vmi_pid_t, value: mem_seg_t
 GHashTable *vmi_events_by_pid; // key: vmi_pid_t, value: pid_events_t
 GSList *pending_page_rescan;   // queue of table rescans
@@ -59,6 +52,17 @@ typedef enum
     PAGE_CAT_1GB_FRAME,
 } page_cat_t;
 
+#define is_pagetable_page(cat) (\
+    cat == PAGE_CAT_PML4 ||\
+    cat == PAGE_CAT_PDPT ||\
+    cat == PAGE_CAT_PD ||\
+    cat == PAGE_CAT_PT)
+
+#define is_userspace_page(cat) (\
+    cat == PAGE_CAT_4KB_FRAME ||\
+    cat == PAGE_CAT_2MB_FRAME ||\
+    cat == PAGE_CAT_1GB_FRAME)
+
 // args: vmi, event, pid, page category
 typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t *, vmi_pid_t, page_cat_t);
 
@@ -68,6 +72,20 @@ typedef struct
     vmi_pid_t pid;
     page_cat_t cat;
 } pending_rescan_t;
+
+typedef struct {
+  vmi_pid_t pid;
+  reg_t cr3;
+  uint8_t flags;
+  page_table_monitor_cb_t cb;
+  GHashTable *write_exec_map;
+  GHashTable *pt_traps;
+} pid_events_t;
+
+typedef struct {
+  vmi_pid_t pid;
+  page_cat_t cat;
+} trapped_page_t;
 
 typedef struct
 {
