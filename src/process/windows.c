@@ -31,7 +31,8 @@
 static addr_t PsInitialSystemProcess = 0;
 static addr_t get_initial_system_process(vmi_instance_t vmi) {
   if (PsInitialSystemProcess == 0)
-    vmi_read_addr_ksym(vmi, "PsInitialSystemProcess", &PsInitialSystemProcess);
+    if(vmi_read_addr_ksym(vmi, "PsInitialSystemProcess", &PsInitialSystemProcess) != VMI_SUCCESS)
+      return 0;
   return PsInitialSystemProcess;
 }
 
@@ -40,6 +41,7 @@ addr_t vmi_current_thread_windows(vmi_instance_t vmi, vmi_event_t *event)
     addr_t thread;
     addr_t prcb;
     addr_t currentthread;
+    return 0;
 
     if (vmi_get_page_mode(vmi, event->vcpu_id) != VMI_PM_IA32E)
     {
@@ -112,21 +114,24 @@ GHashTable* vmi_get_all_pids_windows(vmi_instance_t vmi) {
   addr_t tasks_offset = process_vmi_windows_rekall.eprocess_tasks;
 
   init_proc = get_initial_system_process(vmi);
-  if (vmi_read_addr_va(vmi, init_proc, 0, &eprocess) != VMI_SUCCESS)
-        return NULL;
-  init_proc = eprocess;
+  if (!init_proc) {
+    fprintf(stderr, "vmi_get_all_pids: read of get_initial_system_process failed\n");
+    return NULL;
+  }
+  eprocess = init_proc;
 
   GHashTable* all_pids = g_hash_table_new(g_direct_hash, g_direct_equal);
   while (1) {
     addr_t pid_ptr = eprocess + process_vmi_windows_rekall.eprocess_pid;
     if (vmi_read_32_va(vmi, pid_ptr, 0, (uint32_t *) &pid) == VMI_SUCCESS) {
       g_hash_table_add(all_pids, GINT_TO_POINTER(pid));
+    } else {
+      fprintf(stderr, "vmi_get_all_pids: read of pid failed\n");
     }
-    //else //skip this pid
-    //  log_some_warning("failed to read pid from eprocess")
 
     if (vmi_read_addr_va(vmi, eprocess + tasks_offset, 0, &next_eprocess_list) != VMI_SUCCESS) {
       g_hash_table_destroy(all_pids);
+      fprintf(stderr, "vmi_get_all_pids: read of next_eprocess_list failed\n");
       return NULL;
     }
     eprocess = next_eprocess_list - tasks_offset;
