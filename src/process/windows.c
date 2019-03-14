@@ -27,6 +27,14 @@
 
 #include <vmi/process.h>
 
+// these are private to this source file
+static addr_t PsInitialSystemProcess = 0;
+static addr_t get_initial_system_process(vmi_instance_t vmi) {
+  if (PsInitialSystemProcess == 0)
+    vmi_read_addr_ksym(vmi, "PsInitialSystemProcess", &PsInitialSystemProcess);
+  return PsInitialSystemProcess;
+}
+
 addr_t vmi_current_thread_windows(vmi_instance_t vmi, vmi_event_t *event)
 {
     addr_t thread;
@@ -54,7 +62,8 @@ addr_t windows_find_eprocess_pgd(vmi_instance_t vmi, addr_t pgd)
     addr_t pdbase_offset = process_vmi_windows_rekall.kprocess_pdbase;
     addr_t tasks_offset = process_vmi_windows_rekall.eprocess_tasks;
 
-    if (vmi_read_addr_ksym(vmi, "PsInitialSystemProcess", &list_head) != VMI_SUCCESS)
+    list_head = get_initial_system_process(vmi);
+    if (!list_head)
         return 0;
 
     if (vmi_read_addr_va(vmi, list_head + tasks_offset, 0, &next_process) != VMI_SUCCESS)
@@ -88,6 +97,43 @@ addr_t windows_find_eprocess_pgd(vmi_instance_t vmi, addr_t pgd)
     }
 
     return 0;
+}
+
+//all_pids is a set(int) of all the running pids from pslist walk
+//a set(type) is just a GHashTable where keys are assigned but not values
+//using g_hash_table_add(table, key);
+//
+//the caller must free the returned table with g_hash_table_destroy(table);
+GHashTable* vmi_get_all_pids_windows(vmi_instance_t vmi) {
+  vmi_pid_t pid;  //current pid
+  addr_t init_proc;  //ptr to eprocess of initial system process
+  addr_t eprocess;  //ptr to eprocess of current walked process
+  addr_t next_eprocess_list;  //ptr to eprocess's next_process ptr
+  addr_t tasks_offset = process_vmi_windows_rekall.eprocess_tasks;
+
+  init_proc = get_initial_system_process(vmi);
+  if (vmi_read_addr_va(vmi, init_proc, 0, &eprocess) != VMI_SUCCESS)
+        return NULL;
+  init_proc = eprocess;
+
+  GHashTable* all_pids = g_hash_table_new(g_direct_hash, g_direct_equal);
+  while (1) {
+    addr_t pid_ptr = eprocess + process_vmi_windows_rekall.eprocess_pid;
+    if (vmi_read_32_va(vmi, pid_ptr, 0, (uint32_t *) &pid) == VMI_SUCCESS) {
+      g_hash_table_add(all_pids, GINT_TO_POINTER(pid));
+    }
+    //else //skip this pid
+    //  log_some_warning("failed to read pid from eprocess")
+
+    if (vmi_read_addr_va(vmi, eprocess + tasks_offset, 0, &next_eprocess_list) != VMI_SUCCESS) {
+      g_hash_table_destroy(all_pids);
+      return NULL;
+    }
+    eprocess = next_eprocess_list - tasks_offset;
+    if (eprocess == init_proc)
+      break;
+  }
+  return all_pids;
 }
 
 addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event)

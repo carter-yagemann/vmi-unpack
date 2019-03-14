@@ -86,6 +86,16 @@ char *(*vmi_current_name)(vmi_instance_t vmi, vmi_event_t *event);
 vmi_pid_t (*vmi_current_parent_pid)(vmi_instance_t vmi, vmi_event_t *event);
 
 /**
+ * Gets all currently running PIDs and returns a GHashTable with each key being a PID.
+ * The caller must free the table returned with g_hash_table_destroy(table).
+ *
+ * @param vmi A vmi_instance_t for the guest VM to introspect.
+ *
+ * @return GHashTable* or NULL
+ */
+GHashTable* (*vmi_get_all_pids)(vmi_instance_t vmi);
+
+/**
  * Gets information on the memory segment that the given address belongs to in
  * the current process.
  *
@@ -114,5 +124,6 @@ vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event);
 char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event);
 vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event);
 mem_seg_t vmi_current_find_segment_windows(vmi_instance_t vmi, vmi_event_t *event, addr_t addr);
+GHashTable* vmi_get_all_pids_windows(vmi_instance_t vmi);
 
 #endif

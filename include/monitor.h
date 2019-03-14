@@ -43,6 +43,7 @@ GSList *cr3_callbacks;         // list of CR3 write callbacks
 
 typedef enum
 {
+    PAGE_CAT_NOT_SET,
     PAGE_CAT_PML4,
     PAGE_CAT_PDPT,
     PAGE_CAT_PD,
@@ -63,6 +64,28 @@ typedef enum
     cat == PAGE_CAT_2MB_FRAME ||\
     cat == PAGE_CAT_1GB_FRAME)
 
+static inline const char* cat2str(page_cat_t cat) {
+    static const char* catname[] = {
+        "PAGE_CAT_NOT_SET",
+        "PAGE_CAT_PML4",
+        "PAGE_CAT_PDPT",
+        "PAGE_CAT_PD",
+        "PAGE_CAT_PT",
+        "PAGE_CAT_4KB_FRAME",
+        "PAGE_CAT_2MB_FRAME",
+        "PAGE_CAT_1GB_FRAME",
+    };
+    return catname[cat];
+}
+
+static inline const char* access2str(vmi_event_t *evt) {
+    if (evt->mem_event.out_access & VMI_MEMACCESS_X)
+        return "VMI_MEMACCESS_X";
+    if (evt->mem_event.out_access & VMI_MEMACCESS_W)
+        return "VMI_MEMACCESS_W";
+    return "VMI_MEMACCESS_UNKNOWN";
+} 
+
 // args: vmi, event, pid, page category
 typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t *, vmi_pid_t, page_cat_t);
 
@@ -79,13 +102,17 @@ typedef struct {
   uint8_t flags;
   page_table_monitor_cb_t cb;
   GHashTable *write_exec_map;
-  GHashTable *pt_traps;
+  GHashTable *wr_traps;
 } pid_events_t;
 
 typedef struct {
   vmi_pid_t pid;
   page_cat_t cat;
 } trapped_page_t;
+
+#define trace_trap(addr, trap, mesg) fprintf(stderr, \
+    "%s:trace_trap paddr=%p pid=%d cat=%s mesg=%s\n", \
+    __FUNCTION__, (gpointer)addr, trap->pid, cat2str(trap->cat), mesg)
 
 typedef struct
 {
@@ -121,7 +148,6 @@ void monitor_destroy(vmi_instance_t vmi);
  * @param vmi a libVMI instance
  * @param pid a PID to monitor
  * @param cb a function to invoke when new pages are created
- * @param filter only invoke cb when the new page matches this filter
  * @param optional flags:
  *
  *     MONITOR_FOLLOW_REMAPPING - If this flag is set, the monitor will continue to track the process
@@ -135,8 +161,9 @@ void monitor_destroy(vmi_instance_t vmi);
  *                                addresses above 0x70000000. These pages are ignored by default because
  *                                they typically belong to libraries, heap and stack, which is not
  *                                relevant to capturing most packers.
+ * @param cr3 if not NULL, use this for new PIDs cr3
  */
-void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags);
+void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags, reg_t cr3);
 
 #define MONITOR_FOLLOW_REMAPPING (1U << 0)
 #define MONITOR_FOLLOW_CHILDREN  (1U << 1)

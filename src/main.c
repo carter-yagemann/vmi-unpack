@@ -46,6 +46,7 @@ static struct sigaction action;
 static sigset_t my_sigs;
 static void close_handler(int sig)
 {
+    fprintf(stderr, "close_handler() called\n");
     interrupted = sig;
 }
 
@@ -73,8 +74,7 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     if (pid == process_pid)
     {
-        add_new_pid(pid);
-        monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
+        monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
         monitor_remove_cr3(monitor_pid);
     }
 
@@ -88,9 +88,8 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
     if (name && !strncmp(name, process_name, strlen(name)))
     {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
-        add_new_pid(pid);
-        process_pid = vmi_current_pid(vmi, event);
-        monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
+        process_pid = pid;
+        monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
         monitor_remove_cr3(monitor_name);
     }
     free(name);
@@ -150,6 +149,7 @@ int main(int argc, char *argv[])
     sigaddset(&my_sigs, SIGHUP);
     sigaddset(&my_sigs, SIGINT);
     sigaddset(&my_sigs, SIGALRM);
+    sigaddset(&my_sigs, SIGPIPE);
     // block these signals in main thread and other threads
     pthread_sigmask(SIG_BLOCK, &my_sigs, NULL);
 
@@ -165,6 +165,9 @@ int main(int argc, char *argv[])
     sigaction(SIGHUP,  &action, NULL);
     sigaction(SIGINT,  &action, NULL);
     sigaction(SIGALRM, &action, NULL);
+    sigaction(SIGPIPE, &action, NULL);
+    // unblock these signals in main thread
+    pthread_sigmask(SIG_UNBLOCK, &my_sigs, NULL);
 
     // Initialize libVMI
     vmi_instance_t vmi;
