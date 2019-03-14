@@ -414,20 +414,27 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
     // watched processes have exited. If so, remove them.
 
     vmi_pidcache_flush(vmi);
-    //GHashTable *all_pids = vmi_get_all_pids(vmi);
+    GHashTable *all_pids = vmi_get_all_pids(vmi);
     GHashTableIter iter;
     addr_t temp_dtb;
     gpointer key, value;
     g_hash_table_iter_init(&iter, vmi_events_by_pid);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-      //if (!g_hash_table_contains(all_pids, key)) {
-        vmi_pid_t pid = GPOINTER_TO_INT(key);
+      vmi_pid_t pid = GPOINTER_TO_INT(key);
+      if (all_pids) {
+        if (!g_hash_table_contains(all_pids, key)) {
+          monitor_remove_page_table(vmi, pid);
+          fprintf(stderr, "****** REMOVED DEAD PROCESS: %d ******\n", pid);
+        }
+      } else {
         if (vmi_pid_to_dtb(vmi, pid, &temp_dtb) != VMI_SUCCESS) {
           monitor_remove_page_table(vmi, pid);
           fprintf(stderr, "****** REMOVED DEAD PROCESS: %d ******\n", pid);
         }
+      }
     }
-    //g_hash_table_destroy(all_pids);
+    if (all_pids)
+      g_hash_table_destroy(all_pids);
 
     return VMI_EVENT_RESPONSE_NONE;
 }
