@@ -27,12 +27,14 @@
 #include <semaphore.h>
 #include <glib.h>
 #include <openssl/sha.h>
+#include <openssl/crypto.h>
 
 #include <libvmi/libvmi.h>
 
 #include <dump.h>
 
 #define LAYER_FILENAME_LEN 128
+#define LAYER_FILENAME_PREFIX_LEN 4
 
 gint compare_hashes(gconstpointer a, gconstpointer b)
 {
@@ -49,33 +51,31 @@ gint compare_hashes(gconstpointer a, gconstpointer b)
     return 0;
 }
 
-char *gen_layer_filename(dump_layer_t *dump_layer)
+char *gen_layer_filename(dump_layer_t *dump_layer, int dump_count)
 {
-    uint64_t *layer_ptr;
-    vmi_pid_t pid = dump_layer->pid;
-    reg_t rip = dump_layer->rip;
-    reg_t base_addr = dump_layer->base;
-    int dir_len = strlen(dump_output_dir);
-
-    if (!g_hash_table_contains(pid_layer, &pid))
-    {
-        vmi_pid_t *pid_ptr = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
-        *pid_ptr = pid;
-        layer_ptr = (uint64_t *) malloc(sizeof(uint64_t));
-        *layer_ptr = 0;
-        g_hash_table_insert(pid_layer, pid_ptr, layer_ptr);
+    char *filename = calloc(LAYER_FILENAME_PREFIX_LEN + (SHA256_DIGEST_LENGTH * 2) + 1, sizeof(char));
+    char prefix[LAYER_FILENAME_PREFIX_LEN+1];
+    prefix[LAYER_FILENAME_PREFIX_LEN] = 0x0;
+    sprintf(prefix, "%%0%dd.", LAYER_FILENAME_PREFIX_LEN-1);
+    sprintf(filename, prefix, dump_count);
+    char *offset = filename + LAYER_FILENAME_PREFIX_LEN;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        sprintf(offset+(i*2), "%x", dump_layer->sha256[i]);
     }
-
-    layer_ptr = (uint64_t *) g_hash_table_lookup(pid_layer, &pid);
-
-    // format: <output_dir>/<pid>-<layer>-<base_addr>-<rip>.bin\0
-    char *filename = (char *) malloc(dir_len + LAYER_FILENAME_LEN);
-    snprintf(filename, LAYER_FILENAME_LEN, "%s%010d-%016lx-%016lx-%016lx.bin",
-             dump_output_dir, pid, *layer_ptr, base_addr, rip);
-
-    (*layer_ptr)++;
-
+    filename[LAYER_FILENAME_PREFIX_LEN + (SHA256_DIGEST_LENGTH * 2)] = 0x0;
     return filename;
+}
+
+void free_layer(dump_layer_t *layer) {
+    if (layer) {
+        if(layer->segments) {
+            for(int i = 0; i < layer->segment_count; i++) {
+                free(layer->segments[i]);
+            }
+            free(layer->segments);
+        }
+        free(layer);
+    }
 }
 
 void *dump_worker_loop(void *data)
@@ -84,6 +84,7 @@ void *dump_worker_loop(void *data)
     FILE *ofile;
     unsigned char *hash;
     char *filename;
+    static int dump_count = 0;
 
     while (1)
     {
@@ -92,20 +93,24 @@ void *dump_worker_loop(void *data)
 
         layer = (dump_layer_t *) g_queue_pop_head(dump_queue);
 
-        if (layer->pid == 0 && layer->buff == NULL)
+        if (!layer)
         {
-            free(layer);
             break; // signal to stop
         }
 
         // Only dump the layer if we haven't seen the hash before
-        filename = gen_layer_filename(layer);
+        filename = gen_layer_filename(layer, dump_count);
         printf("dump_worker_loop: considering dump of %s\n", filename);
         if (!g_slist_find_custom(seen_hashes, layer->sha256, compare_hashes))
         {
             printf("dump_worker_loop: starting dump of %s\n", filename);
             ofile = fopen(filename, "wb");
-            fwrite(layer->buff, sizeof(char), layer->size, ofile);
+            for (int i = 0; i < layer->segment_count; i++) {
+                fwrite(layer->segments[i]->buf,
+                       sizeof(char),
+                       layer->segments[i]->size,
+                       ofile);
+            }
             fclose(ofile);
             // add hash to seen_hashes
             hash = (unsigned char *) malloc(SHA256_DIGEST_LENGTH);
@@ -115,8 +120,7 @@ void *dump_worker_loop(void *data)
         }
 
         free(filename);
-        free(layer->buff);
-        free(layer);
+        free_layer(layer);
     }
 
     return NULL;
@@ -156,14 +160,7 @@ void start_dump_thread(char *dir)
 
 void add_eod()
 {
-    dump_layer_t *layer;
-
-    layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
-    layer->pid = 0;
-    layer->rip = 0;
-    layer->base = 0;
-    layer->buff = NULL;
-    layer->size = 0;
+    dump_layer_t *layer = NULL;
     g_queue_push_tail(dump_queue, layer);
 
     sem_post(&dump_sem);
@@ -192,10 +189,21 @@ void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, re
     layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
     layer->pid = pid;
     layer->rip = rip;
-    layer->base = base;
-    layer->buff = buffer;
-    layer->size = size;
-    SHA256((unsigned char *) buffer, size, layer->sha256);
+    layer->segment_count = 1;
+    layer->segments = malloc(sizeof(vad_seg_t) * 1);
+    layer->segments[0]->base_va = base;
+    layer->segments[0]->buf = buffer;
+    layer->segments[0]->size = size;
+
+    SHA256_CTX c;
+    SHA256_Init(&c);
+    for (int i = 0; i < layer->segment_count; i++) {
+        SHA256_Update(&c,
+                      (unsigned char *)layer->segments[i]->buf,
+                      layer->segments[i]->size);
+    }
+    SHA256_Final(layer->sha256, &c);
+    OPENSSL_cleanse(&c, sizeof(c));
     g_queue_push_tail(dump_queue, layer);
 
     sem_post(&dump_sem);

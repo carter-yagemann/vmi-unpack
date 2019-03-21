@@ -36,6 +36,10 @@ static addr_t get_initial_system_process(vmi_instance_t vmi) {
   return PsInitialSystemProcess;
 }
 
+addr_t vmi_get_process_by_cr3(vmi_instance_t vmi, addr_t cr3) {
+    return windows_find_eprocess_pgd(vmi, cr3);
+}
+
 addr_t vmi_current_thread_windows(vmi_instance_t vmi, vmi_event_t *event)
 {
     addr_t thread;
@@ -149,13 +153,33 @@ addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event)
     // If we can't find the current process the fast way, fall back to the slower
     // but more reliable windows_find_eprocess_pgd.
     if (!thread)
-        return windows_find_eprocess_pgd(vmi, event->x86_regs->cr3);
+        return vmi_get_process_by_cr3(vmi, event->x86_regs->cr3);
 
     addr_t kthread = thread + process_vmi_windows_rekall.kthread_process;
     if (vmi_read_addr_va(vmi, kthread, 0, &process) != VMI_SUCCESS)
-        return windows_find_eprocess_pgd(vmi, event->x86_regs->cr3);
+        return vmi_get_process_by_cr3(vmi, event->x86_regs->cr3);
 
     return process;
+}
+
+vmi_pid_t vmi_get_eprocess_pid(vmi_instance_t vmi, addr_t process) {
+    vmi_pid_t pid;
+    addr_t eprocess_pid = process + process_vmi_windows_rekall.eprocess_pid;
+    if (vmi_read_32_va(vmi, eprocess_pid, 0, (uint32_t *) &pid) != VMI_SUCCESS)
+        return 0;
+
+    return pid;
+}
+
+addr_t vmi_get_eprocess_vadroot(vmi_instance_t vmi, addr_t process) {
+    addr_t curr_vad = 0;
+    addr_t eprocess_vadroot = process + process_vmi_windows_rekall.eprocess_vadroot;
+    vmi_read_addr_va(vmi, eprocess_vadroot, 0, &curr_vad);
+    if (curr_vad) {
+        // root VAD is an _EX_FAST_REF, so the 3 least significant bits are a reference counter.
+        curr_vad &= 0xFFFFFFFFFFFFFFF8;
+    }
+    return curr_vad;
 }
 
 vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event)
@@ -171,12 +195,7 @@ vmi_pid_t vmi_current_pid_windows(vmi_instance_t vmi, vmi_event_t *event)
     if (!process)
         return 0;
 
-    vmi_pid_t pid;
-    addr_t eprocess_pid = process + process_vmi_windows_rekall.eprocess_pid;
-    if (vmi_read_32_va(vmi, eprocess_pid, 0, (uint32_t *) &pid) != VMI_SUCCESS)
-        return 0;
-
-    return pid;
+    return vmi_get_eprocess_pid(vmi, process);
 }
 
 char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event)
@@ -245,16 +264,13 @@ mem_seg_t vmi_current_find_segment_windows(vmi_instance_t vmi, vmi_event_t *even
     // tree starting with the root VAD.
     //
     // For more information, see: http://lilxam.tuxfamily.org/blog/?p=326&lang=en
-    addr_t curr_vad;
-    addr_t eprocess_vadroot = process + process_vmi_windows_rekall.eprocess_vadroot;
+    addr_t curr_vad = vmi_get_eprocess_vadroot(vmi, process);
 
-    if (vmi_read_addr_va(vmi, eprocess_vadroot, 0, &curr_vad) != VMI_SUCCESS)
+    if (!curr_vad)
     {
         fprintf(stderr, "WARNING: Windows Process VMI - Could not find root VAD\n");
         return mem_seg;
     }
-    // root VAD is an _EX_FAST_REF, so the 3 least significant bits are a reference counter.
-    curr_vad &= 0xFFFFFFFFFFFFFFF8;
 
     while (1)
     {
