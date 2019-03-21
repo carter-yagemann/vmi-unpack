@@ -37,14 +37,22 @@ GQueue *dump_queue;
 GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 GSList *seen_hashes;
 
+#define SEG_SIZE_MAX 100
+
+typedef struct
+{
+    char *buf;
+    addr_t base_va;
+    size_t size;
+} vad_seg_t;
+
 typedef struct
 {
     vmi_pid_t pid;
     reg_t rip;
-    reg_t base;
-    char *buff;
-    uint64_t size;
     unsigned char sha256[SHA256_DIGEST_LENGTH];
+    vad_seg_t **segments;
+    unsigned segment_count;
 } dump_layer_t;
 
 /**
