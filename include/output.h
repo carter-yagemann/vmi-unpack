@@ -31,7 +31,7 @@ typedef struct {
     vmi_pid_t pid;
 } pe_dump_t;
 
-typedef void (*traverse_func)(void *, void *);
+typedef void (*traverse_func)(vmi_instance_t, addr_t, void *);
 
 /**
  * Callback for when a layer is detected via write-then-execute (W2X).
@@ -49,10 +49,11 @@ void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, pag
 /**
  * Iterates over a VAD tree
  *
+ * @param vmi A libVMI instance.
  * @param node The current node
  * @param func The function to call on each iteration
- * @param data User-specified data (e.g. pointer to a pe_dump_t) object
+ * @param data User-specified data
  */
-void vad_iterator(void *node, traverse_func func, void *data);
+void vad_iterator(vmi_instance_t vmi, addr_t node, traverse_func func, void *data);
 
 #endif

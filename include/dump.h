@@ -37,7 +37,7 @@ GQueue *dump_queue;
 GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 GSList *seen_hashes;
 
-#define SEG_SIZE_MAX 100
+#define SEG_COUNT_MAX 100
 
 typedef struct
 {
@@ -92,5 +92,7 @@ void stop_dump_thread();
  * VMA but the instruction that triggered the dump was somewhere in the middle.
  */
 void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, reg_t base);
+
+void queue_vads_to_dump(dump_layer_t *dump);
 
 #endif

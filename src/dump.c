@@ -70,6 +70,7 @@ void free_layer(dump_layer_t *layer) {
     if (layer) {
         if(layer->segments) {
             for(int i = 0; i < layer->segment_count; i++) {
+                free(layer->segments[i]->buf);
                 free(layer->segments[i]);
             }
             free(layer->segments);
@@ -213,4 +214,17 @@ void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, re
     g_queue_push_tail(dump_queue, layer);
 
     sem_post(&dump_sem);
+}
+
+void queue_vads_to_dump(dump_layer_t *layer) {
+    SHA256_CTX c;
+    SHA256_Init(&c);
+    for (int i = 0; i < layer->segment_count; i++) {
+        SHA256_Update(&c,
+                      (unsigned char *)layer->segments[i]->buf,
+                      layer->segments[i]->size);
+    }
+    SHA256_Final(layer->sha256, &c);
+    OPENSSL_cleanse(&c, sizeof(c));
+    g_queue_push_tail(dump_queue, layer);
 }
