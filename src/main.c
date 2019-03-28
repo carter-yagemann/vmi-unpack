@@ -74,6 +74,7 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     if (pid == process_pid)
     {
+      fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
         /* monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0); */
         monitor_remove_cr3(monitor_pid);
@@ -90,6 +91,7 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
     {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
         process_pid = pid;
+        fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
         /* monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0); */
         monitor_remove_cr3(monitor_name);
@@ -179,7 +181,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "ERROR: libVMI - Failed to initialize libVMI.\n");
         if (vmi != NULL)
         {
-            vmi_destroy(vmi);
+            //vmi_destroy(vmi);
         }
         return EXIT_FAILURE;
     }
@@ -230,10 +232,12 @@ int main(int argc, char *argv[])
     }
 
     // Cleanup
+    stop_dump_thread();
+    fprintf(stderr, "dump thread stopped\n");
     monitor_destroy(vmi);
     process_vmi_destroy(vmi);
-    stop_dump_thread();
 
     vmi_destroy(vmi);
+    fprintf(stderr, "doing clean exit\n");
     return EXIT_SUCCESS;
 }

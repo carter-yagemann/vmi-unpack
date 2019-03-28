@@ -369,34 +369,87 @@ void cr3_callback_dispatcher(gpointer cb, gpointer event)
     ((event_callback_t)cb)(monitor_vmi, event);
 }
 
+void print_events_by_pid(void) {
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, vmi_events_by_pid);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    vmi_pid_t pid = GPOINTER_TO_INT(key);
+    pid_events_t *pid_event = value;
+    fprintf(stderr, "%s: events_by_pid, pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
+  }
+}
+
+void print_cr3_to_pid(void) {
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, cr3_to_pid);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    reg_t cr3 = (long)key;
+    vmi_pid_t pid = GPOINTER_TO_INT(value);
+    fprintf(stderr, "%s: cr3_to_pid, pid=%d cr3=0x%lx\n", __FUNCTION__, pid, cr3);
+  }
+}
+
+void vmi_list_all_processes_windows(vmi_instance_t vmi, vmi_event_t *event);
 event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 {
+    //bail out right away if monitoring is not started or is now off
+    if (!page_table_monitor_init)
+      return VMI_EVENT_RESPONSE_NONE;
+
     // If there are any registered callbacks, invoke them
     g_slist_foreach(cr3_callbacks, cr3_callback_dispatcher, event);
 
-    vmi_pid_t pid = vmi_current_pid(vmi, event);
-    pid_events_t *cb_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
+    reg_t evt_cr3 = event->x86_regs->cr3;
 
-    if (cb_event != NULL)
-    {
-        // Check if process' page table has been replaced (e.g. execve). If it has and the callback
-        // wants to follow remappings, the callback has to be registered again. Otherwise, remove
-        // the callback because it's no longer valid.
-        if (cb_event->cr3 != event->x86_regs->cr3)
-        {
-            fprintf(stderr, "%s: hash_cr3=0x%lx event_cr3=0x%lx\n",
-                __FUNCTION__, cb_event->cr3, event->x86_regs->cr3);
-            page_table_monitor_cb_t cb = cb_event->cb;
-            uint8_t cb_flags = cb_event->flags;
-            monitor_remove_page_table(vmi, pid);
-
-            if (cb_flags & MONITOR_FOLLOW_REMAPPING) {
-                monitor_add_page_table(vmi, pid, cb, cb_flags, event->x86_regs->cr3);
-            }
+    //bail out right away if the cr3 is one that we track
+    if (g_hash_table_contains(cr3_to_pid, (gpointer)evt_cr3)) {
+      vmi_pid_t cr3_pid = GPOINTER_TO_INT(g_hash_table_lookup(cr3_to_pid, (gpointer)evt_cr3));
+      //but before we bail, trap its page table once it executes the first time
+      if (cr3_pid == 0) {
+        vmi_pid_t pid = vmi_current_pid(vmi, event);
+        pid_events_t *pid_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
+        if (pid_event) {
+          addr_t rip_pa = 0;
+          vmi_v2pcache_flush(vmi, evt_cr3);
+          vmi_pagetable_lookup(vmi, evt_cr3, event->x86_regs->rip, &rip_pa);
+          fprintf(stderr, "%s: trapping table, pid=%d evt_cr3=0x%lx\n", __FUNCTION__, pid, evt_cr3);
+          g_hash_table_insert(cr3_to_pid, (gpointer)event->x86_regs->cr3, GINT_TO_POINTER(pid));
+          monitor_trap_table(vmi, pid_event);
+        } else {
+          //print_events_by_pid();
+          //print_cr3_to_pid();
+          //vmi_list_all_processes_windows(vmi, event);
         }
-
-        return VMI_EVENT_RESPONSE_NONE;
+      }
+      return VMI_EVENT_RESPONSE_NONE;
     }
+
+    ////the cr3 for a process should not change. so ignore all of this.
+    //vmi_pid_t pid = vmi_current_pid(vmi, event);
+    //pid_events_t *cb_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
+    //if (cb_event != NULL)
+    //{
+    //    // Check if process' page table has been replaced (e.g. execve). If it has and the callback
+    //    // wants to follow remappings, the callback has to be registered again. Otherwise, remove
+    //    // the callback because it's no longer valid.
+    //    if (cb_event->cr3 != event->x86_regs->cr3)
+    //    {
+    //        fprintf(stderr, "%s: hash_cr3=0x%lx event_cr3=0x%lx\n",
+    //            __FUNCTION__, cb_event->cr3, event->x86_regs->cr3);
+    //        page_table_monitor_cb_t cb = cb_event->cb;
+    //        uint8_t cb_flags = cb_event->flags;
+    //        monitor_remove_page_table(vmi, pid);
+
+    //        if (cb_flags & MONITOR_FOLLOW_REMAPPING) {
+    //            monitor_add_page_table(vmi, pid, cb, cb_flags, event->x86_regs->cr3);
+    //        }
+    //    }
+
+    //    return VMI_EVENT_RESPONSE_NONE;
+    //}
+    ////the cr3 for a process should not change. so ignore all of this.
 
     // This process isn't being tracked. If its parent is a process that *is* being tracked, check
     // if the callback for that process wants to follow children and if so, register it.
@@ -405,6 +458,7 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 
     if (parent_cb_event != NULL && (parent_cb_event->flags & MONITOR_FOLLOW_CHILDREN))
     {
+      vmi_pid_t pid = vmi_current_pid(vmi, event);
         monitor_add_page_table(vmi, pid, parent_cb_event->cb, parent_cb_event->flags, 0);
         fprintf(stderr, "*********** FOUND CHILD: PID %d *****\n", pid);
         return VMI_EVENT_RESPONSE_NONE;
@@ -413,28 +467,20 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
     // Iterater over `vmi_events_by_pid` and check if any of our
     // watched processes have exited. If so, remove them.
 
-    vmi_pidcache_flush(vmi);
     GHashTable *all_pids = vmi_get_all_pids(vmi);
+    if (!all_pids)
+      return VMI_EVENT_RESPONSE_NONE;
     GHashTableIter iter;
-    addr_t temp_dtb;
     gpointer key, value;
     g_hash_table_iter_init(&iter, vmi_events_by_pid);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
       vmi_pid_t pid = GPOINTER_TO_INT(key);
-      if (all_pids) {
-        if (!g_hash_table_contains(all_pids, key)) {
-          monitor_remove_page_table(vmi, pid);
-          fprintf(stderr, "****** REMOVED DEAD PROCESS: %d ******\n", pid);
-        }
-      } else {
-        if (vmi_pid_to_dtb(vmi, pid, &temp_dtb) != VMI_SUCCESS) {
-          monitor_remove_page_table(vmi, pid);
-          fprintf(stderr, "****** REMOVED DEAD PROCESS: %d ******\n", pid);
-        }
+      if (!g_hash_table_contains(all_pids, key)) {
+        monitor_remove_page_table(vmi, pid);
+        fprintf(stderr, "****** REMOVED DEAD PROCESS: %d ******\n", pid);
       }
     }
-    if (all_pids)
-      g_hash_table_destroy(all_pids);
+    g_hash_table_destroy(all_pids);
 
     return VMI_EVENT_RESPONSE_NONE;
 }
@@ -452,12 +498,22 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     const size_t len = 80;
     char mesg[len];
     char *curr_name;
+
+    //bail out right away if monitoring is not started or is now off
+    if (!page_table_monitor_init)
+      return VMI_EVENT_RESPONSE_NONE;
+
+    //bail out right away if the cr3 is not one that we track
+    //if (!g_hash_table_contains(cr3_to_pid, (gpointer)event->x86_regs->cr3))
+    //  return VMI_EVENT_RESPONSE_NONE;
+
     addr_t paddr = PADDR_SHIFT(event->mem_event.gfn);
     trapped_page_t *trap = g_hash_table_lookup(trapped_pages, (gpointer)paddr);
 
     if (trap == NULL)
     {
         fprintf(stderr, "WARNING: Monitor - Failed to find PID for physical address 0x%lx\n", paddr);
+        trace_trap(paddr, trap, "trap not found");
         monitor_unset_trap(vmi, paddr);
         return VMI_EVENT_RESPONSE_NONE;
     }
@@ -513,7 +569,6 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     }
 
     my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
-
     if (my_pid_events == NULL)
     {
         fprintf(stderr, "WARNING: Monitor - Failed to find callback event for PID %d\n", pid);
@@ -525,6 +580,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     {
       mem_seg_t vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
       if (!vma.size) {
+        return VMI_EVENT_RESPONSE_NONE;
         char mesg[] = "%s:VMA not found"
           ":pid=%d:curr_pid=%d"
           ":pid_cr3=0x%lx:event_cr3=0x%lx"
@@ -582,6 +638,7 @@ int monitor_init(vmi_instance_t vmi)
     }
 
     trapped_pages = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, destroy_trapped_page);
+    cr3_to_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
     prev_vma = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
     vmi_events_by_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal,
         NULL, destroy_watched_pid);
@@ -633,8 +690,10 @@ void monitor_destroy(vmi_instance_t vmi)
     vmi_clear_event(vmi, &page_table_monitor_cr3, NULL);
     vmi_clear_event(vmi, &page_table_monitor_event, NULL);
     vmi_clear_event(vmi, &page_table_monitor_ss, NULL);
+    fprintf(stderr, "monitor_destroy() events cleared\n");
 
     g_hash_table_destroy(trapped_pages);
+    g_hash_table_destroy(cr3_to_pid);
     g_hash_table_destroy(vmi_events_by_pid);
     g_slist_free(pending_page_rescan);
 
@@ -671,9 +730,12 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     } else pid_event->cr3 = cr3;
     pid_event->flags = flags;
     pid_event->cb = cb;
+    //set the pid to 0 as a flag that its page table has not been scanned yet
+    //then delay trapping its page table until it first executes
+    g_hash_table_insert(cr3_to_pid, (gpointer)pid_event->cr3, 0);
     fprintf(stderr, "%s: pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
 
-    monitor_trap_table(vmi, pid_event);
+    //monitor_trap_table(vmi, pid_event);
 }
 
 void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
@@ -689,6 +751,8 @@ void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
     fprintf(stderr, "%s: pid=%d\n", __FUNCTION__, pid);
     my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
     if (my_pid_events) {
+      //remove from cr3_to_pid before my_pid_events gets destroyed
+      g_hash_table_remove(cr3_to_pid, (gpointer)my_pid_events->cr3);
       int i;
       //clear userspace traps
       GHashTableIter iter;

@@ -36,6 +36,7 @@ vmi_event_t page_table_monitor_event;
 vmi_event_t page_table_monitor_ss;
 vmi_event_t page_table_monitor_cr3;
 GHashTable *trapped_pages;     // key: addr_t, value: page_attr_t
+GHashTable *cr3_to_pid;        // key: reg_t, value: vmi_pid_t
 GHashTable *prev_vma;          // key: vmi_pid_t, value: mem_seg_t
 GHashTable *vmi_events_by_pid; // key: vmi_pid_t, value: pid_events_t
 GSList *pending_page_rescan;   // queue of table rescans
