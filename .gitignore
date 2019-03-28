@@ -5,3 +5,6 @@
 *.swp
 /agent/*.conf
 !/agent/example.conf
+*.gcda
+*.gcno
+*.gcov
