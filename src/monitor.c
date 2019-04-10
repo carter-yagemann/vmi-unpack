@@ -37,10 +37,10 @@
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
 
-int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr)
+int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr, addr_t paddr)
 {
     mem_seg_t vma = vmi_current_find_segment(vmi, event, vaddr);
-    mem_seg_t *p_vma;
+    prev_vma_t *p_vma;
 
     if (!vma.size)
     {
@@ -58,23 +58,24 @@ int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t
     if (dump_size <= 0x1000)
         return 0;
 
-    p_vma = (mem_seg_t *) g_hash_table_lookup(prev_vma, &pid);
+    p_vma = (prev_vma_t *) g_hash_table_lookup(prev_vma, &pid);
     if (p_vma == NULL)
     {
         vmi_pid_t *pid_new = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
-        mem_seg_t *vma_new = (mem_seg_t *) malloc(sizeof(mem_seg_t));
+        prev_vma_t *vma_new = (prev_vma_t *) malloc(sizeof(prev_vma_t));
         *pid_new = pid;
-        vma_new->base_va = vma.base_va;
-        vma_new->size = vma.size;
+        vma_new->vma.base_va = vma.base_va;
+        vma_new->vma.size = vma.size;
+        vma_new->paddr = paddr;
         g_hash_table_insert(prev_vma, pid_new, vma_new);
         return 1;
     }
 
-    if (vma.base_va == p_vma->base_va && vma.size == p_vma->size)
+    if (vma.base_va == p_vma->vma.base_va && vma.size == p_vma->vma.size)
         return 0;
 
-    p_vma->base_va = vma.base_va;
-    p_vma->size = vma.size;
+    p_vma->vma.base_va = vma.base_va;
+    p_vma->vma.size = vma.size;
 
     return 1;
 }
@@ -138,13 +139,14 @@ void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, m
     gpointer *pages = g_hash_table_get_keys_as_array(exec_map, &num_pages);
     if (pages)
       for (int i = 0; i < num_pages; i++)
-        vmi_set_mem_event(vmi, (addr_t)pages[i], VMI_MEMACCESS_W, 0);
+        // performance optimization, we might miss some (W->X->W->X) patterns on the same page, but alternative is very slow
+        vmi_set_mem_event(vmi, (addr_t)pages[i], VMI_MEMACCESS_N, 0);
     g_free(pages);
     g_hash_table_remove(my_pid_events->write_exec_map, (gpointer)vma.base_va);
 }
 
 // a page belonging to the PID has been written to. place an
-// "execute" trap on that page with VMI_MEMACCESS_WX
+// "execute" trap on that page with VMI_MEMACCESS_X
 void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem_seg_t vma)
 {
   if (!vma.size) {
@@ -163,7 +165,8 @@ void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem
       fprintf(stderr, "monitor_trap_vma: %d, base_va=0x%lx, paddr=0x%lx\n",
           pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
       g_hash_table_add(exec_map, (gpointer)event->mem_event.gfn);
-      vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_WX, 0);
+      // TODO - Bug: Only setting trap on first page of VMA
+      vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);
     }
   }
 }
@@ -521,6 +524,9 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     pid = trap->pid;
     vmi_pid_t curr_pid = vmi_current_pid(vmi, event);
 
+    //printf("monitor_handler:recv_event paddr=%p cat=%s access=%s curr_pid=%d\n",
+    //    (void *) paddr, cat2str(trap->cat), access2str(event), curr_pid);
+
     // If the PID of the current process is not equal to the PID retrieved from trapped_pages, then:
     // 1, a system process is changing our PIDs pagetable. ignore.
     // 2, its an execve() and our PID is being replaced. update trap->pid.
@@ -599,12 +605,15 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
             pid_pa, evt_pa,
             event->mem_event.gla, paddr
             );
+
+        // TODO - Is this safe to do?
+        monitor_unset_trap(vmi, paddr);
         return VMI_EVENT_RESPONSE_NONE;
       }
       if (event->mem_event.out_access & VMI_MEMACCESS_X)
       {
         if ((my_pid_events->flags & MONITOR_HIGH_ADDRS) || event->mem_event.gla < HIGH_ADDR_MARK)
-          if (check_prev_vma(vmi, event, pid, event->mem_event.gla))
+          if (check_prev_vma(vmi, event, pid, event->mem_event.gla, paddr))
             my_pid_events->cb(vmi, event, pid, trap->cat);
         monitor_untrap_vma(vmi, event, pid, vma);
       }

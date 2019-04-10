@@ -29,6 +29,8 @@
 #include <libvmi/libvmi.h>
 #include <libvmi/events.h>
 
+#include <vmi/process.h>
+
 addr_t max_paddr;
 bool page_table_monitor_init;
 vmi_instance_t monitor_vmi;
@@ -37,10 +39,15 @@ vmi_event_t page_table_monitor_ss;
 vmi_event_t page_table_monitor_cr3;
 GHashTable *trapped_pages;     // key: addr_t, value: page_attr_t
 GHashTable *cr3_to_pid;        // key: reg_t, value: vmi_pid_t
-GHashTable *prev_vma;          // key: vmi_pid_t, value: mem_seg_t
+GHashTable *prev_vma;          // key: vmi_pid_t, value: prev_vma_t
 GHashTable *vmi_events_by_pid; // key: vmi_pid_t, value: pid_events_t
 GSList *pending_page_rescan;   // queue of table rescans
 GSList *cr3_callbacks;         // list of CR3 write callbacks
+
+typedef struct {
+    mem_seg_t vma;
+    addr_t paddr;
+} prev_vma_t;
 
 typedef enum
 {
