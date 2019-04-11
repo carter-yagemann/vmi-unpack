@@ -33,6 +33,7 @@
 #include <vmi/process.h>
 
 #define HIGH_ADDR_MARK 0x70000000
+#define KERNEL_MARK    (1UL << 63)
 
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
@@ -112,7 +113,7 @@ void monitor_unset_trap(vmi_instance_t vmi, addr_t paddr)
 }
 
 // after a page that has been written to has also been executed,
-// we "untrap" it by setting all pages in that VMA back to VMI_MEMACCESS_W
+// we "untrap" it by setting all pages in that VMA back to VMI_MEMACCESS_N
 void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem_seg_t vma)
 {
     GHashTable *exec_map;
@@ -123,6 +124,7 @@ void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, m
         fprintf(stderr, "WARNING: monitor_untrap_vma - Could not find VMA for virtual address 0x%lx\n", event->mem_event.gla);
         return;
     }
+
     my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
     if (!my_pid_events) {
       fprintf(stderr, "WARNING: monitor_untrap_vma - Could not find PID %d\n", pid);
@@ -154,6 +156,11 @@ void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem
     __FUNCTION__, event->mem_event.gla, PADDR_SHIFT(event->mem_event.gfn));
     return;
   }
+  if (vma.base_va >= KERNEL_MARK)
+  {
+    fprintf(stderr, "WARNING: monitor_trap_vma - Tried to trap kernel pages, request ignored\n");
+    return;
+  }
   pid_events_t *my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
   if (my_pid_events) {
     GHashTable *exec_map = g_hash_table_lookup(my_pid_events->write_exec_map, (gpointer)vma.base_va);
@@ -165,7 +172,6 @@ void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem
       fprintf(stderr, "monitor_trap_vma: %d, base_va=0x%lx, paddr=0x%lx\n",
           pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
       g_hash_table_add(exec_map, (gpointer)event->mem_event.gfn);
-      // TODO - Bug: Only setting trap on first page of VMA
       vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);
     }
   }
@@ -524,8 +530,8 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     pid = trap->pid;
     vmi_pid_t curr_pid = vmi_current_pid(vmi, event);
 
-    //printf("monitor_handler:recv_event paddr=%p cat=%s access=%s curr_pid=%d\n",
-    //    (void *) paddr, cat2str(trap->cat), access2str(event), curr_pid);
+    //printf("monitor_handler:recv_event rip=%p paddr=%p cat=%s access=%s curr_pid=%d\n",
+    //    (void *) event->x86_regs->rip, (void *) paddr, cat2str(trap->cat), access2str(event), curr_pid);
 
     // If the PID of the current process is not equal to the PID retrieved from trapped_pages, then:
     // 1, a system process is changing our PIDs pagetable. ignore.
@@ -606,8 +612,13 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
             event->mem_event.gla, paddr
             );
 
-        // TODO - Is this safe to do?
-        monitor_unset_trap(vmi, paddr);
+        // write traps are only set by monitor_set_trap() and exec by monitor_trap_vma()
+        if (event->mem_event.out_access & VMI_MEMACCESS_W)
+            monitor_unset_trap(vmi, paddr);
+        else if (event->mem_event.out_access & VMI_MEMACCESS_X) {
+            vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
+            monitor_untrap_vma(vmi, event, pid, vma);
+        }
         return VMI_EVENT_RESPONSE_NONE;
       }
       if (event->mem_event.out_access & VMI_MEMACCESS_X)
