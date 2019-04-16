@@ -424,7 +424,7 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
           vmi_v2pcache_flush(vmi, evt_cr3);
           vmi_pagetable_lookup(vmi, evt_cr3, event->x86_regs->rip, &rip_pa);
           fprintf(stderr, "%s: trapping table, pid=%d evt_cr3=0x%lx\n", __FUNCTION__, pid, evt_cr3);
-          g_hash_table_insert(cr3_to_pid, (gpointer)event->x86_regs->cr3, GINT_TO_POINTER(pid));
+          g_hash_table_insert(cr3_to_pid, (gpointer)evt_cr3, GINT_TO_POINTER(pid));
           monitor_trap_table(vmi, pid_event);
         } else {
           //print_events_by_pid();
