@@ -42,6 +42,7 @@ GHashTable *cr3_to_pid;        // key: reg_t, value: vmi_pid_t
 GHashTable *prev_vma;          // key: vmi_pid_t, value: prev_vma_t
 GHashTable *vmi_events_by_pid; // key: vmi_pid_t, value: pid_events_t
 GSList *pending_page_rescan;   // queue of table rescans
+GSList *pending_page_retrap;   // queue of userspace retraps
 GSList *cr3_callbacks;         // list of CR3 write callbacks
 
 typedef struct {
