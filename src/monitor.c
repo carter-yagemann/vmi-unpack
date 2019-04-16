@@ -112,6 +112,15 @@ void monitor_unset_trap(vmi_instance_t vmi, addr_t paddr)
     g_hash_table_remove(trapped_pages, (gpointer)paddr);
 }
 
+static inline pending_rescan_t* make_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat)
+{
+  pending_rescan_t *pending = (pending_rescan_t *) malloc(sizeof(pending_rescan_t));
+  pending->paddr = paddr;
+  pending->pid   = pid;
+  pending->cat   = cat;
+  return pending;
+}
+
 // after a page that has been written to has also been executed,
 // we "untrap" it by setting all pages in that VMA back to VMI_MEMACCESS_N
 void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem_seg_t vma)
@@ -332,19 +341,16 @@ void monitor_trap_table(vmi_instance_t vmi, pid_events_t *pid_event)
     monitor_trap_pml4(vmi, dtb, pid_event->pid);
 }
 
-void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat)
+void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat, GSList *list)
 {
-    pending_rescan_t *pending = (pending_rescan_t *) malloc(sizeof(pending_rescan_t));
-    pending->paddr = paddr;
-    pending->pid   = pid;
-    pending->cat   = cat;
-
-    pending_page_rescan = g_slist_prepend(pending_page_rescan, pending);
+    pending_rescan_t *pending = make_rescan(paddr, pid, cat);
+    list = g_slist_prepend(list, pending);
 }
 
 void process_pending_rescan(gpointer data, gpointer user_data)
 {
     pending_rescan_t *rescan = (pending_rescan_t *) data;
+  GSList *list = (GSList*) user_data;
 
     //fprintf(stderr, "%s: paddr=0x%lx pid=%d cat=%s\n",
     //    __FUNCTION__, rescan->paddr, rescan->pid, cat2str(rescan->cat));
@@ -366,11 +372,12 @@ void process_pending_rescan(gpointer data, gpointer user_data)
         case PAGE_CAT_4KB_FRAME:
         case PAGE_CAT_2MB_FRAME:
         case PAGE_CAT_1GB_FRAME:
+            break;
         case PAGE_CAT_NOT_SET:
             break;
     }
 
-    pending_page_rescan = g_slist_remove(pending_page_rescan, data);
+    list = g_slist_remove(list, data);
 }
 
 void cr3_callback_dispatcher(gpointer cb, gpointer event)
@@ -496,7 +503,7 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 
 event_response_t monitor_handler_ss(vmi_instance_t vmi, vmi_event_t *event)
 {
-    g_slist_foreach(pending_page_rescan, process_pending_rescan, NULL);
+    g_slist_foreach(pending_page_rescan, process_pending_rescan, pending_page_rescan);
     return VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP;
 }
 
@@ -643,7 +650,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     {
       //fprintf(stderr, "%s: paddr=0x%lx pid=%d cat=%s access=%s curr_pid=%d\n",
       //    __FUNCTION__, paddr, pid, cat2str(trap->cat), access2str(event), curr_pid);
-      queue_pending_rescan(paddr, pid, trap->cat);
+      queue_pending_rescan(paddr, pid, trap->cat, pending_page_rescan);
       return (VMI_EVENT_RESPONSE_EMULATE | VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP);
     }
 }
