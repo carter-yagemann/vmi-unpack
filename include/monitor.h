@@ -103,6 +103,7 @@ typedef struct
     addr_t paddr;
     vmi_pid_t pid;
     page_cat_t cat;
+    vmi_mem_access_t access;
 } pending_rescan_t;
 
 typedef struct {

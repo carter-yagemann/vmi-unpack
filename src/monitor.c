@@ -120,6 +120,14 @@ static inline pending_rescan_t* make_rescan(addr_t paddr, vmi_pid_t pid, page_ca
   pending->paddr = paddr;
   pending->pid   = pid;
   pending->cat   = cat;
+  pending->access = VMI_MEMACCESS_INVALID;
+  return pending;
+}
+
+static inline pending_rescan_t* make_retrap(addr_t paddr, vmi_pid_t pid, page_cat_t cat, vmi_mem_access_t access)
+{
+  pending_rescan_t *pending = make_rescan(paddr, pid, cat);
+  pending->access = access;
   return pending;
 }
 
@@ -387,7 +395,7 @@ void process_pending_rescan(gpointer data, gpointer user_data)
         case PAGE_CAT_4KB_FRAME:
         case PAGE_CAT_2MB_FRAME:
         case PAGE_CAT_1GB_FRAME:
-            monitor_set_trap(monitor_vmi, page->paddr, VMI_MEMACCESS_W, page->pid, cat);
+            monitor_set_trap(monitor_vmi, page->paddr, page->access, page->pid, cat);
             break;
         case PAGE_CAT_NOT_SET:
             break;
@@ -591,7 +599,8 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
                 curr_name, curr_pid, access2str(event));
             free(curr_name);
             trace_trap(paddr, trap, mesg);
-            monitor_unset_trap(vmi, paddr);
+            pending_rescan_t *retrap = make_retrap(paddr, pid, trap->cat, event->mem_event.out_access);
+            untrap_and_schedule_retrap(vmi, pending_page_retrap, retrap);
             return VMI_EVENT_RESPONSE_NONE;
           }
         } else {
@@ -615,7 +624,6 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     {
       mem_seg_t vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
       if (!vma.size) {
-        return VMI_EVENT_RESPONSE_NONE;
         char mesg[] = "%s:VMA not found"
           ":pid=%d:curr_pid=%d"
           ":pid_cr3=0x%lx:event_cr3=0x%lx"
@@ -636,11 +644,16 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
             );
 
         // write traps are only set by monitor_set_trap() and exec by monitor_trap_vma()
-        if (event->mem_event.out_access & VMI_MEMACCESS_W)
-            monitor_unset_trap(vmi, paddr);
+        if (event->mem_event.out_access & VMI_MEMACCESS_W) {
+          pending_rescan_t *retrap = make_retrap(paddr, pid, trap->cat, event->mem_event.out_access);
+          untrap_and_schedule_retrap(vmi, pending_page_retrap, retrap);
+        }
         else if (event->mem_event.out_access & VMI_MEMACCESS_X) {
-            vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
-            monitor_untrap_vma(vmi, event, pid, vma);
+          // this should never happen. only our PID can exec its own userspace pages,
+          // and therefore the VMA should be found
+          curr_name = vmi_current_name(vmi, event);
+          fprintf(stderr, "%s: BUG: trapped execute by unknown PID, pid=%d, name=%s\n", __FUNCTION__, curr_pid, curr_name);
+          free(curr_name);
         }
         return VMI_EVENT_RESPONSE_NONE;
       }
