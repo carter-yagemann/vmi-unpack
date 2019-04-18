@@ -230,10 +230,12 @@ int main(int argc, char *argv[])
     }
 
     // Cleanup
+    stop_dump_thread();
+    fprintf(stderr, "dump thread stopped\n");
     monitor_destroy(vmi);
     process_vmi_destroy(vmi);
-    stop_dump_thread();
 
     vmi_destroy(vmi);
+    fprintf(stderr, "doing clean exit\n");
     return EXIT_SUCCESS;
 }
