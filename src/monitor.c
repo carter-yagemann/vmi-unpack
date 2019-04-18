@@ -378,6 +378,29 @@ void cr3_callback_dispatcher(gpointer cb, gpointer event)
     ((event_callback_t)cb)(monitor_vmi, event);
 }
 
+void print_events_by_pid(void) {
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, vmi_events_by_pid);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    vmi_pid_t pid = GPOINTER_TO_INT(key);
+    pid_events_t *pid_event = value;
+    fprintf(stderr, "%s: events_by_pid, pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
+  }
+}
+
+void print_cr3_to_pid(void) {
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, cr3_to_pid);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    reg_t cr3 = (long)key;
+    vmi_pid_t pid = GPOINTER_TO_INT(value);
+    fprintf(stderr, "%s: cr3_to_pid, pid=%d cr3=0x%lx\n", __FUNCTION__, pid, cr3);
+  }
+}
+
+void vmi_list_all_processes_windows(vmi_instance_t vmi, vmi_event_t *event);
 event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 {
     // If there are any registered callbacks, invoke them
@@ -445,6 +468,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     if (trap == NULL)
     {
         fprintf(stderr, "WARNING: Monitor - Failed to find PID for physical address 0x%lx\n", paddr);
+        trace_trap(paddr, trap, "trap not found");
         monitor_unset_trap(vmi, paddr);
         return VMI_EVENT_RESPONSE_NONE;
     }
