@@ -371,6 +371,7 @@ void process_pending_rescan(gpointer data, gpointer user_data)
     }
 
     pending_page_rescan = g_slist_remove(pending_page_rescan, data);
+    free(data);
 }
 
 void cr3_callback_dispatcher(gpointer cb, gpointer event)
@@ -689,7 +690,7 @@ void monitor_destroy(vmi_instance_t vmi)
     g_hash_table_destroy(trapped_pages);
     g_hash_table_destroy(cr3_to_pid);
     g_hash_table_destroy(vmi_events_by_pid);
-    g_slist_free(pending_page_rescan);
+    g_slist_free_full(pending_page_rescan, free);
 
     page_table_monitor_init = 0;
 }
