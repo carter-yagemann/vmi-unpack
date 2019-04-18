@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "ERROR: libVMI - Failed to initialize libVMI.\n");
         if (vmi != NULL)
         {
-            vmi_destroy(vmi);
+            //vmi_destroy(vmi);
         }
         return EXIT_FAILURE;
     }
