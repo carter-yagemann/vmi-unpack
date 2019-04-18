@@ -54,13 +54,13 @@ gint compare_hashes(gconstpointer a, gconstpointer b)
 char *gen_layer_filename(dump_layer_t *dump_layer, int dump_count)
 {
     char *filename = calloc(LAYER_FILENAME_PREFIX_LEN + (SHA256_DIGEST_LENGTH * 2) + 1, sizeof(char));
-    char prefix[LAYER_FILENAME_PREFIX_LEN+1];
-    prefix[LAYER_FILENAME_PREFIX_LEN] = 0x0;
+    char prefix[LAYER_FILENAME_PREFIX_LEN+2];
+    prefix[LAYER_FILENAME_PREFIX_LEN+1] = 0x0;
     sprintf(prefix, "%%0%dd.", LAYER_FILENAME_PREFIX_LEN-1);
     sprintf(filename, prefix, dump_count);
     char *offset = filename + LAYER_FILENAME_PREFIX_LEN;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        sprintf(offset+(i*2), "%x", dump_layer->sha256[i]);
+        sprintf(offset+(i*2), "%02x", dump_layer->sha256[i]);
     }
     filename[LAYER_FILENAME_PREFIX_LEN + (SHA256_DIGEST_LENGTH * 2)] = 0x0;
     return filename;
@@ -84,6 +84,7 @@ void *dump_worker_loop(void *data)
     FILE *ofile;
     unsigned char *hash;
     char *filename;
+    int dir_len = strlen(dump_output_dir);
     static int dump_count = 0;
 
     while (1)
@@ -100,11 +101,13 @@ void *dump_worker_loop(void *data)
 
         // Only dump the layer if we haven't seen the hash before
         filename = gen_layer_filename(layer, dump_count);
-        printf("dump_worker_loop: considering dump of %s\n", filename);
+        char *filepath = (char*) malloc(dir_len + LAYER_FILENAME_LEN);
+        snprintf(filepath, dir_len + LAYER_FILENAME_LEN - 1, "%s%s", dump_output_dir, filename);
+        printf("dump_worker_loop: considering dump of %s\n", filepath);
         if (!g_slist_find_custom(seen_hashes, layer->sha256, compare_hashes))
         {
-            printf("dump_worker_loop: starting dump of %s\n", filename);
-            ofile = fopen(filename, "wb");
+            printf("dump_worker_loop: starting dump of %s\n", filepath);
+            ofile = fopen(filepath, "wb");
             for (int i = 0; i < layer->segment_count; i++) {
                 fwrite(layer->segments[i]->buf,
                        sizeof(char),
@@ -116,10 +119,12 @@ void *dump_worker_loop(void *data)
             hash = (unsigned char *) malloc(SHA256_DIGEST_LENGTH);
             memcpy(hash, layer->sha256, SHA256_DIGEST_LENGTH);
             seen_hashes = g_slist_prepend(seen_hashes, hash);
-            printf("dump_worker_loop: finished dump of %s\n", filename);
+            printf("dump_worker_loop: finished dump of %s\n", filepath);
+            dump_count++;
         }
 
         free(filename);
+        free(filepath);
         free_layer(layer);
     }
 
