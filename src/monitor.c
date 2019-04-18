@@ -384,28 +384,6 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
     g_slist_foreach(cr3_callbacks, cr3_callback_dispatcher, event);
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
-    pid_events_t *cb_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
-
-    if (cb_event != NULL)
-    {
-        // Check if process' page table has been replaced (e.g. execve). If it has and the callback
-        // wants to follow remappings, the callback has to be registered again. Otherwise, remove
-        // the callback because it's no longer valid.
-        if (cb_event->cr3 != event->x86_regs->cr3)
-        {
-            fprintf(stderr, "%s: hash_cr3=0x%lx event_cr3=0x%lx\n",
-                __FUNCTION__, cb_event->cr3, event->x86_regs->cr3);
-            page_table_monitor_cb_t cb = cb_event->cb;
-            uint8_t cb_flags = cb_event->flags;
-            monitor_remove_page_table(vmi, pid);
-
-            if (cb_flags & MONITOR_FOLLOW_REMAPPING) {
-                monitor_add_page_table(vmi, pid, cb, cb_flags, event->x86_regs->cr3);
-            }
-        }
-
-        return VMI_EVENT_RESPONSE_NONE;
-    }
 
     // This process isn't being tracked. If its parent is a process that *is* being tracked, check
     // if the callback for that process wants to follow children and if so, register it.
