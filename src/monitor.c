@@ -412,6 +412,28 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     pid_events_t *pid_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
+    reg_t evt_cr3 = event->x86_regs->cr3;
+
+    //bail out right away if the cr3 is one that we track
+    if (g_hash_table_contains(cr3_to_pid, (gpointer)evt_cr3)) {
+      vmi_pid_t cr3_pid = GPOINTER_TO_INT(g_hash_table_lookup(cr3_to_pid, (gpointer)evt_cr3));
+      //but before we bail, trap its page table once it executes the first time
+      if (cr3_pid == 0) {
+        if (pid_event) {
+          //addr_t rip_pa = 0;
+          //vmi_v2pcache_flush(vmi, evt_cr3);
+          //vmi_pagetable_lookup(vmi, evt_cr3, event->x86_regs->rip, &rip_pa);
+          fprintf(stderr, "%s: trapping table, pid=%d evt_cr3=0x%lx\n", __FUNCTION__, pid, evt_cr3);
+          g_hash_table_insert(cr3_to_pid, (gpointer)event->x86_regs->cr3, GINT_TO_POINTER(pid));
+          monitor_trap_table(vmi, pid_event);
+        } else {
+          //print_events_by_pid();
+          //print_cr3_to_pid();
+          //vmi_list_all_processes_windows(vmi, event);
+        }
+      }
+      return VMI_EVENT_RESPONSE_NONE;
+    }
 
     //bail out right away if we already track this PID
     if (pid_event) {
@@ -707,7 +729,7 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     g_hash_table_insert(cr3_to_pid, (gpointer)pid_event->cr3, 0);
     fprintf(stderr, "%s: pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
 
-    monitor_trap_table(vmi, pid_event);
+    //monitor_trap_table(vmi, pid_event);
 }
 
 void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
