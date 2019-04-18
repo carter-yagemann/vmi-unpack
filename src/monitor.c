@@ -593,7 +593,8 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
                 curr_name, curr_pid, access2str(event));
             free(curr_name);
             trace_trap(paddr, trap, mesg);
-            monitor_unset_trap(vmi, paddr);
+            pending_rescan_t *retrap = make_retrap(paddr, pid, trap->cat, event->mem_event.out_access);
+            untrap_and_schedule_retrap(vmi, pending_page_retrap, retrap);
             return VMI_EVENT_RESPONSE_NONE;
           }
         } else {
@@ -637,11 +638,17 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
             );
 
         // write traps are only set by monitor_set_trap() and exec by monitor_trap_vma()
-        if (event->mem_event.out_access & VMI_MEMACCESS_W)
-            monitor_unset_trap(vmi, paddr);
+        if (event->mem_event.out_access & VMI_MEMACCESS_W) {
+          pending_rescan_t *retrap = make_retrap(paddr, pid, trap->cat, event->mem_event.out_access);
+          untrap_and_schedule_retrap(vmi, pending_page_retrap, retrap);
+        }
         else if (event->mem_event.out_access & VMI_MEMACCESS_X) {
-            vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
-            monitor_untrap_vma(vmi, event, pid, vma);
+          // this should never happen. only our PID can exec its own userspace pages,
+          // and therefore the VMA should be found
+          curr_name = vmi_current_name(vmi, event);
+          fprintf(stderr, "%s: BUG: trapped execute by unknown PID, pid=%d, name=%s\n",
+              __FUNCTION__, curr_pid, curr_name);
+          free(curr_name);
         }
         return VMI_EVENT_RESPONSE_NONE;
       }
