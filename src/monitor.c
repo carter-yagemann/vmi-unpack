@@ -420,6 +420,15 @@ void cr3_callback_dispatcher(gpointer cb, gpointer user_data)
     ((event_callback_t)cb)(vmi, event);
 }
 
+void remove_dead_pid(gpointer data, gpointer user_data) {
+  vmi_pid_t dead_pid = GPOINTER_TO_INT(data);
+  foreach_data_t *cb_data = (foreach_data_t *) user_data;
+  vmi_instance_t vmi = cb_data->vmi;
+  GSList *list = cb_data->list;
+  monitor_remove_page_table(vmi, dead_pid);
+  list = g_slist_remove(list, data);
+}
+
 void print_events_by_pid(void) {
   GHashTableIter iter;
   gpointer key, value;
@@ -506,15 +515,22 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
       return VMI_EVENT_RESPONSE_NONE;
     GHashTableIter iter;
     gpointer key, value;
+    GSList *dead_pids = NULL;
     g_hash_table_iter_init(&iter, vmi_events_by_pid);
     while (g_hash_table_iter_next(&iter, &key, &value)) {
-      vmi_pid_t pid = GPOINTER_TO_INT(key);
+      vmi_pid_t pid_k = GPOINTER_TO_INT(key);
       if (!g_hash_table_contains(all_pids, key)) {
-        monitor_remove_page_table(vmi, pid);
-        fprintf(stderr, "****** REMOVED DEAD PROCESS: %d ******\n", pid);
+        dead_pids = g_slist_prepend(dead_pids, key);
+        fprintf(stderr, "****** REMOVED DEAD PROCESS: %d ******\n", pid_k);
       }
     }
     g_hash_table_destroy(all_pids);
+    if (dead_pids) {
+      foreach_data_t cb_data;
+      cb_data.vmi = vmi;
+      cb_data.list = dead_pids;
+      g_slist_foreach(dead_pids, remove_dead_pid, &cb_data);
+    }
 
     return VMI_EVENT_RESPONSE_NONE;
 }
