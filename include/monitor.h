@@ -33,7 +33,6 @@
 
 addr_t max_paddr;
 bool page_table_monitor_init;
-vmi_instance_t monitor_vmi;
 vmi_event_t page_table_monitor_event;
 vmi_event_t page_table_monitor_ss;
 vmi_event_t page_table_monitor_cr3;
@@ -103,6 +102,14 @@ typedef struct
     vmi_pid_t pid;
     page_cat_t cat;
 } pending_rescan_t;
+
+typedef struct
+{
+    vmi_instance_t vmi;   //to avoid needing a global vmi handle
+    vmi_event_t *event;   //some things need the event
+    GSList *list;         //some thing iterate a GSList
+    gpointer data;        //one extra pointer for anything else
+} foreach_data_t;
 
 typedef struct {
   vmi_pid_t pid;
