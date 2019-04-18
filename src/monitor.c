@@ -403,10 +403,20 @@ void print_cr3_to_pid(void) {
 void vmi_list_all_processes_windows(vmi_instance_t vmi, vmi_event_t *event);
 event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
 {
+    //bail out right away if monitoring is not started or is now off
+    if (!page_table_monitor_init)
+      return VMI_EVENT_RESPONSE_NONE;
+
     // If there are any registered callbacks, invoke them
     g_slist_foreach(cr3_callbacks, cr3_callback_dispatcher, event);
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
+    pid_events_t *pid_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
+
+    //bail out right away if we already track this PID
+    if (pid_event) {
+      return VMI_EVENT_RESPONSE_NONE;
+    }
 
     // This process isn't being tracked. If its parent is a process that *is* being tracked, check
     // if the callback for that process wants to follow children and if so, register it.
@@ -454,6 +464,11 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     const size_t len = 80;
     char mesg[len];
     char *curr_name;
+
+    //bail out right away if monitoring is not started or is now off
+    if (!page_table_monitor_init)
+      return VMI_EVENT_RESPONSE_NONE;
+
     addr_t paddr = PADDR_SHIFT(event->mem_event.gfn);
     trapped_page_t *trap = g_hash_table_lookup(trapped_pages, (gpointer)paddr);
 
