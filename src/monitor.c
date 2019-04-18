@@ -503,7 +503,6 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     }
 
     my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
-
     if (my_pid_events == NULL)
     {
         fprintf(stderr, "WARNING: Monitor - Failed to find callback event for PID %d\n", pid);
@@ -580,6 +579,7 @@ int monitor_init(vmi_instance_t vmi)
     }
 
     trapped_pages = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, destroy_trapped_page);
+    cr3_to_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
     prev_vma = g_hash_table_new_full(g_int_hash, g_int_equal, free, free);
     vmi_events_by_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal,
         NULL, destroy_watched_pid);
@@ -631,8 +631,10 @@ void monitor_destroy(vmi_instance_t vmi)
     vmi_clear_event(vmi, &page_table_monitor_cr3, NULL);
     vmi_clear_event(vmi, &page_table_monitor_event, NULL);
     vmi_clear_event(vmi, &page_table_monitor_ss, NULL);
+    fprintf(stderr, "monitor_destroy() events cleared\n");
 
     g_hash_table_destroy(trapped_pages);
+    g_hash_table_destroy(cr3_to_pid);
     g_hash_table_destroy(vmi_events_by_pid);
     g_slist_free(pending_page_rescan);
 
@@ -669,6 +671,9 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     } else pid_event->cr3 = cr3;
     pid_event->flags = flags;
     pid_event->cb = cb;
+    //set the pid to 0 as a flag that its page table has not been scanned yet
+    //then delay trapping its page table until it first executes
+    g_hash_table_insert(cr3_to_pid, (gpointer)pid_event->cr3, 0);
     fprintf(stderr, "%s: pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
 
     monitor_trap_table(vmi, pid_event);
@@ -687,6 +692,8 @@ void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
     fprintf(stderr, "%s: pid=%d\n", __FUNCTION__, pid);
     my_pid_events = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
     if (my_pid_events) {
+      //remove from cr3_to_pid before my_pid_events gets destroyed
+      g_hash_table_remove(cr3_to_pid, (gpointer)my_pid_events->cr3);
       int i;
       //clear userspace traps
       GHashTableIter iter;
