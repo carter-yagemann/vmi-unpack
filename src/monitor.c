@@ -38,6 +38,8 @@
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
 
+void process_pending_rescan(gpointer data, gpointer user_data);
+
 int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr, addr_t paddr)
 {
     mem_seg_t vma = vmi_current_find_segment(vmi, event, vaddr);
@@ -118,7 +120,33 @@ static inline pending_rescan_t* make_rescan(addr_t paddr, vmi_pid_t pid, page_ca
   pending->paddr = paddr;
   pending->pid   = pid;
   pending->cat   = cat;
+  pending->access = VMI_MEMACCESS_INVALID;
   return pending;
+}
+
+static inline pending_rescan_t* make_retrap(addr_t paddr, vmi_pid_t pid, page_cat_t cat, vmi_mem_access_t access)
+{
+  pending_rescan_t *pending = make_rescan(paddr, pid, cat);
+  pending->access = access;
+  return pending;
+}
+
+// untrap page and schedule a retrap for later, most likely at cr3 change
+void untrap_and_schedule_retrap(vmi_instance_t vmi, GSList *list, pending_rescan_t *page) {
+  monitor_unset_trap(vmi, page->paddr);
+  list = g_slist_prepend(list, page);
+}
+
+// called in monitor_handler_cr3 to retrap any pages scheduled for retrapping
+event_response_t cr3_retrap(vmi_instance_t vmi, vmi_event_t *event) {
+  foreach_data_t cb_data;
+  if (pending_page_retrap) {
+    cb_data.vmi = vmi;
+    cb_data.event = event;
+    cb_data.list = pending_page_retrap;
+    g_slist_foreach(pending_page_retrap, process_pending_rescan, &cb_data);
+  }
+  return VMI_EVENT_RESPONSE_NONE;
 }
 
 // after a page that has been written to has also been executed,
@@ -374,6 +402,7 @@ void process_pending_rescan(gpointer data, gpointer user_data)
         case PAGE_CAT_4KB_FRAME:
         case PAGE_CAT_2MB_FRAME:
         case PAGE_CAT_1GB_FRAME:
+            monitor_set_trap(vmi, rescan->paddr, rescan->access, rescan->pid, cat);
             break;
         case PAGE_CAT_NOT_SET:
             break;
@@ -658,7 +687,9 @@ int monitor_init(vmi_instance_t vmi)
     vmi_events_by_pid = g_hash_table_new_full(g_direct_hash, g_direct_equal,
         NULL, destroy_watched_pid);
     pending_page_rescan = NULL;
+    pending_page_retrap = NULL;
     cr3_callbacks = NULL;
+    monitor_add_cr3(cr3_retrap);
 
     SETUP_MEM_EVENT(&page_table_monitor_event, 0, VMI_MEMACCESS_WX, monitor_handler, 1);
     if (vmi_register_event(vmi, &page_table_monitor_event) != VMI_SUCCESS)
@@ -710,6 +741,7 @@ void monitor_destroy(vmi_instance_t vmi)
     g_hash_table_destroy(cr3_to_pid);
     g_hash_table_destroy(vmi_events_by_pid);
     g_slist_free_full(pending_page_rescan, free);
+    g_slist_free_full(pending_page_retrap, free);
 
     page_table_monitor_init = 0;
 }
