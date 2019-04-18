@@ -190,7 +190,8 @@ void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, re
     layer->pid = pid;
     layer->rip = rip;
     layer->segment_count = 1;
-    layer->segments = malloc(sizeof(vad_seg_t) * 1);
+    layer->segments = malloc(sizeof(vad_seg_t*) * 1);
+    layer->segments[0] = malloc(sizeof(vad_seg_t));
     layer->segments[0]->base_va = base;
     layer->segments[0]->buf = buffer;
     layer->segments[0]->size = size;
