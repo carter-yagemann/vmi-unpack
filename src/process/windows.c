@@ -45,7 +45,6 @@ addr_t vmi_current_thread_windows(vmi_instance_t vmi, vmi_event_t *event)
     addr_t thread;
     addr_t prcb;
     addr_t currentthread;
-    return 0;
 
     if (vmi_get_page_mode(vmi, event->vcpu_id) != VMI_PM_IA32E)
     {
