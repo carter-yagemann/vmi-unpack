@@ -6,23 +6,26 @@ dist: trusty
 addons:
   apt:
     packages:
-      - build-essential
-      - libssl-dev
-      - libglib2.0-dev
-      - libjson-glib-dev
-      - libxen-dev
-      - libxc-dev
-      - libxenstore3.0
       - bison
-      - libbison-dev
+      - build-essential
+      - cmake
+      - doxygen
       - flex
       - git
+      - libbison-dev
+      - libcunit1-dev
+      - libglib2.0-dev
+      - libjson-c-dev
+      - libjson-glib-dev
+      - libssl-dev
+      - libvirt-dev
+      - libxc-dev
+      - libxen-dev
+      - libxenstore3.0
+      - libyajl-dev
       - python
       - python-pip
       - python3
-      - libcunit1-dev
-      - cmake
-      - libvirt-dev
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
