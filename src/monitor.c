@@ -143,7 +143,7 @@ event_response_t cr3_retrap(vmi_instance_t vmi, vmi_event_t *event) {
   if (pending_page_retrap) {
     cb_data.vmi = vmi;
     cb_data.event = event;
-    cb_data.list = pending_page_retrap;
+    cb_data.list = &pending_page_retrap;
     g_slist_foreach(pending_page_retrap, process_pending_rescan, &cb_data);
   }
   return VMI_EVENT_RESPONSE_NONE;
@@ -369,10 +369,10 @@ void monitor_trap_table(vmi_instance_t vmi, pid_events_t *pid_event)
     monitor_trap_pml4(vmi, dtb, pid_event->pid);
 }
 
-void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat, GSList *list)
+void queue_pending_rescan(addr_t paddr, vmi_pid_t pid, page_cat_t cat, GSList **list)
 {
     pending_rescan_t *pending = make_rescan(paddr, pid, cat);
-    list = g_slist_prepend(list, pending);
+    *list = g_slist_prepend(*list, pending);
 }
 
 void process_pending_rescan(gpointer data, gpointer user_data)
@@ -380,7 +380,6 @@ void process_pending_rescan(gpointer data, gpointer user_data)
     pending_rescan_t *rescan = (pending_rescan_t *) data;
     foreach_data_t *rescan_data = (foreach_data_t *) user_data;
     vmi_instance_t vmi = rescan_data->vmi;
-    GSList *list = rescan_data->list;
 
     //fprintf(stderr, "%s: paddr=0x%lx pid=%d cat=%s\n",
     //    __FUNCTION__, rescan->paddr, rescan->pid, cat2str(rescan->cat));
@@ -408,7 +407,7 @@ void process_pending_rescan(gpointer data, gpointer user_data)
             break;
     }
 
-    list = g_slist_remove(list, data);
+    *rescan_data->list = g_slist_remove(*rescan_data->list, data);
     free(data);
 }
 
@@ -424,9 +423,8 @@ void remove_dead_pid(gpointer data, gpointer user_data) {
   vmi_pid_t dead_pid = GPOINTER_TO_INT(data);
   foreach_data_t *cb_data = (foreach_data_t *) user_data;
   vmi_instance_t vmi = cb_data->vmi;
-  GSList *list = cb_data->list;
   monitor_remove_page_table(vmi, dead_pid);
-  list = g_slist_remove(list, data);
+  *cb_data->list = g_slist_remove(*cb_data->list, data);
 }
 
 void print_events_by_pid(void) {
@@ -462,7 +460,7 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
     foreach_data_t cb_data;
     cb_data.vmi = vmi;
     cb_data.event = event;
-    cb_data.list = cr3_callbacks;
+    cb_data.list = &cr3_callbacks;
     g_slist_foreach(cr3_callbacks, cr3_callback_dispatcher, &cb_data);
 
     vmi_pid_t pid = vmi_current_pid(vmi, event);
@@ -528,7 +526,7 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
     if (dead_pids) {
       foreach_data_t cb_data;
       cb_data.vmi = vmi;
-      cb_data.list = dead_pids;
+      cb_data.list = &dead_pids;
       g_slist_foreach(dead_pids, remove_dead_pid, &cb_data);
     }
 
@@ -540,7 +538,7 @@ event_response_t monitor_handler_ss(vmi_instance_t vmi, vmi_event_t *event)
     foreach_data_t rescan_data;
     rescan_data.vmi = vmi;
     rescan_data.event = event;
-    rescan_data.list = pending_page_rescan;
+    rescan_data.list = &pending_page_rescan;
     g_slist_foreach(pending_page_rescan, process_pending_rescan, &rescan_data);
     return VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP;
 }
@@ -690,7 +688,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
     {
       //fprintf(stderr, "%s: paddr=0x%lx pid=%d cat=%s access=%s curr_pid=%d\n",
       //    __FUNCTION__, paddr, pid, cat2str(trap->cat), access2str(event), curr_pid);
-      queue_pending_rescan(paddr, pid, trap->cat, pending_page_rescan);
+      queue_pending_rescan(paddr, pid, trap->cat, &pending_page_rescan);
       return (VMI_EVENT_RESPONSE_EMULATE | VMI_EVENT_RESPONSE_TOGGLE_SINGLESTEP);
     }
 }
