@@ -19,30 +19,31 @@
 # SOFTWARE.
 
 CC=gcc
+FLAGS=-std=gnu11 -Wall
 
 main:
 	mkdir -p bin
-	$(CC) src/*.c src/process/*.c -Wall -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl`
+	$(CC) src/*.c src/process/*.c $(FLAGS) -I include -o bin/unpack `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl`
 
 debug:
 	mkdir -p bin
-	$(CC) src/*.c src/process/*.c -Wall -g3 -I include -o bin/unpack -L/usr/lib64 `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl`
+	$(CC) src/*.c src/process/*.c $(FLAGS) -g3 -I include -o bin/unpack -L/usr/lib64 `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl`
 
 # export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH
 # export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/home/linuxbrew/.linuxbrew/opt/glib/lib/pkgconfig
 debug-linuxbrew:
 	mkdir -p bin
-	$(CC) src/*.c src/process/*.c -Wall -g3 -fsanitize=address -fno-omit-frame-pointer -I include -o bin/unpack -L/usr/local/lib64 `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl` -Wl,-rpath="/home/linuxbrew/.linuxbrew/opt/glib/lib64:/home/linuxbrew/.linuxbrew/lib:/usr/local/lib64"
+	$(CC) src/*.c src/process/*.c $(FLAGS) -g3 -fsanitize=address -fno-omit-frame-pointer -I include -o bin/unpack -L/usr/local/lib64 `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0 openssl` -Wl,-rpath="/home/linuxbrew/.linuxbrew/opt/glib/lib64:/home/linuxbrew/.linuxbrew/lib:/usr/local/lib64"
 
 .PHONY: tools
 
 tools:
 	mkdir -p bin
-	$(CC) tools/vmi_table_walk.c -Wall -I include -o bin/vmi-table-walk `pkg-config --cflags --libs libvmi`
-	$(CC) tools/table_monitor.c src/monitor.c src/rekall_parser.c src/process/*.c -Wall -I include -o bin/table-monitor `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
-	$(CC) tools/rekall_linux.c src/rekall_parser.c -Wall -I include -o bin/rekall-linux `pkg-config --cflags --libs json-glib-1.0`
-	$(CC) tools/rekall_windows.c src/rekall_parser.c -Wall -I include -o bin/rekall-windows `pkg-config --cflags --libs json-glib-1.0`
-	$(CC) tools/cr3_tracker.c src/rekall_parser.c src/process/*.c -Wall -I include -o bin/cr3-tracker `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+	$(CC) tools/vmi_table_walk.c $(FLAGS) -I include -o bin/vmi-table-walk `pkg-config --cflags --libs libvmi`
+	$(CC) tools/table_monitor.c src/monitor.c src/rekall_parser.c src/process/*.c $(FLAGS) -I include -o bin/table-monitor `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
+	$(CC) tools/rekall_linux.c src/rekall_parser.c $(FLAGS) -I include -o bin/rekall-linux `pkg-config --cflags --libs json-glib-1.0`
+	$(CC) tools/rekall_windows.c src/rekall_parser.c $(FLAGS) -I include -o bin/rekall-windows `pkg-config --cflags --libs json-glib-1.0`
+	$(CC) tools/cr3_tracker.c src/rekall_parser.c src/process/*.c $(FLAGS) -I include -o bin/cr3-tracker `pkg-config --cflags --libs libvmi glib-2.0 json-glib-1.0`
 
 .PHONY: astyle
 
@@ -55,4 +56,4 @@ clean:
 .PHONY: test
 
 test:
-	$(CC) test/unit.c src/rekall_parser.c src/dump.c -Wall -I include -o test/unit -l cunit `pkg-config --cflags --libs json-glib-1.0 openssl`
+	$(CC) test/unit.c src/rekall_parser.c src/dump.c $(FLAGS) -I include -o test/unit -l cunit `pkg-config --cflags --libs json-glib-1.0 openssl`

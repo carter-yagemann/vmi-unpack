@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
 
     process_vmi_init(vmi, argv[3]);
     monitor_init(vmi);
-    monitor_add_page_table(vmi, atoi(argv[2]), w2x_cb, MONITOR_FOLLOW_REMAPPING);
+    monitor_add_page_table(vmi, atoi(argv[2]), w2x_cb, MONITOR_FOLLOW_REMAPPING, 0);
 
     // Main loop
     status_t status;

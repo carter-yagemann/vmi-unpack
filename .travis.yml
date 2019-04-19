@@ -6,28 +6,34 @@ dist: trusty
 addons:
   apt:
     packages:
-      - build-essential
-      - libssl-dev
-      - libglib2.0-dev
-      - libjson-glib-dev
-      - libxen-dev
-      - libxc-dev
-      - libxenstore3.0
       - bison
-      - libbison-dev
+      - build-essential
+      - cmake
+      - doxygen
       - flex
       - git
+      - libbison-dev
+      - libcunit1-dev
+      - libglib2.0-dev
+      - libjson-c-dev
+      - libjson-glib-dev
+      - libssl-dev
+      - libvirt-dev
+      - libxc-dev
+      - libxen-dev
+      - libxenstore3.0
+      - libyajl-dev
       - python
       - python-pip
       - python3
-      - libcunit1-dev
+      - python3-pip
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
-  - cd $HOME/libvmi && $HOME/libvmi/autogen.sh
-  - cd $HOME/libvmi && $HOME/libvmi/configure --disable-kvm
-  - cd $HOME/libvmi && make
-  - cd $HOME/libvmi && sudo make install
+  - mkdir $HOME/libvmi/build
+  - cd $HOME/libvmi/build && cmake ..
+  - cd $HOME/libvmi/build && make
+  - cd $HOME/libvmi/build && sudo make install
   - sudo pip install rekall-core rekall
 
 matrix:
@@ -62,5 +68,7 @@ matrix:
         - TEST="Agent"
       script:
         - cd ${TRAVIS_BUILD_DIR}/agent
-        - python2 server.py -h
-        - python3 server.py -h
+        - sudo pip install -r requirements.txt
+        - sudo pip3 install -r requirements.txt
+        - python2 server.py --help
+        - python3 server.py --help
