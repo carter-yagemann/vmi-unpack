@@ -21,13 +21,15 @@ addons:
       - python-pip
       - python3
       - libcunit1-dev
+      - cmake
+      - libvirt-dev
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
-  - cd $HOME/libvmi && $HOME/libvmi/autogen.sh
-  - cd $HOME/libvmi && $HOME/libvmi/configure --disable-kvm
-  - cd $HOME/libvmi && make
-  - cd $HOME/libvmi && sudo make install
+  - mkdir $HOME/libvmi/build
+  - cd $HOME/libvmi/build && cmake ..
+  - cd $HOME/libvmi/build && make
+  - cd $HOME/libvmi/build && sudo make install
   - sudo pip install rekall-core rekall
 
 matrix:
