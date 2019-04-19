@@ -26,6 +26,7 @@ addons:
       - python
       - python-pip
       - python3
+      - python3-pip
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
@@ -67,5 +68,7 @@ matrix:
         - TEST="Agent"
       script:
         - cd ${TRAVIS_BUILD_DIR}/agent
+        - sudo pip install requirements.txt
+        - sudo pip3 install requirements.txt
         - python2 server.py -h
         - python3 server.py -h

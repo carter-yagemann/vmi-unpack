@@ -21,6 +21,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from __future__ import print_function
+
 import click
 import logging
 import os
@@ -317,7 +319,7 @@ def parse_conf(conf_fd):
 @click.command()
 @click.option('-c', '--conf', type=click.File('r'), default='./example.conf',
               help='Path to configuration (default: ./example.conf)')
-@click.option('-l', '--log-level', 'loglevel', type=click.Choice([10,20,30,40,50]), default=20,
+@click.option('-l', '--log-level', 'loglevel', type=click.IntRange(0, 50, clamp=True), default=20,
               help='Logging level (10: Debug, 20: Info, 30: Warning, '
               '40: Error, 50: Critical) (default: Info)')
 @click.option('--dry-run', 'simulate', is_flag=True,
