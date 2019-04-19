@@ -70,5 +70,5 @@ matrix:
         - cd ${TRAVIS_BUILD_DIR}/agent
         - sudo pip install -r requirements.txt
         - sudo pip3 install -r requirements.txt
-        - python2 server.py -h
-        - python3 server.py -h
+        - python2 server.py --help
+        - python3 server.py --help
