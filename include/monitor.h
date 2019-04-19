@@ -109,7 +109,7 @@ typedef struct
 {
     vmi_instance_t vmi;   //to avoid needing a global vmi handle
     vmi_event_t *event;   //some things need the event
-    GSList *list;         //some thing iterate a GSList
+    GSList **list;        //some thing iterate a GSList
     gpointer data;        //one extra pointer for anything else
 } foreach_data_t;
 
