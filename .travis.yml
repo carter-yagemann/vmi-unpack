@@ -68,7 +68,7 @@ matrix:
         - TEST="Agent"
       script:
         - cd ${TRAVIS_BUILD_DIR}/agent
-        - sudo pip install requirements.txt
-        - sudo pip3 install requirements.txt
+        - sudo pip install -r requirements.txt
+        - sudo pip3 install -r requirements.txt
         - python2 server.py -h
         - python3 server.py -h
