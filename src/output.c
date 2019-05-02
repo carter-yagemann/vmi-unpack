@@ -82,6 +82,7 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data) {
     dump->segments[dump->segment_count] = malloc(sizeof(vad_seg_t));
     dump->segments[dump->segment_count]->base_va = base_va;
     dump->segments[dump->segment_count]->size = size;
+    dump->segments[dump->segment_count]->va_size = size;
     dump->segments[dump->segment_count]->buf = malloc(size);
     size_t read_size = 0;
     vmi_read_va(
@@ -90,9 +91,10 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data) {
                 dump->pid,
                 size,
                 dump->segments[dump->segment_count]->buf, &read_size);
-    if (read_size != size) {
+    if (read_size < size) {
         dump->segments[dump->segment_count]->buf =
             realloc(dump->segments[dump->segment_count]->buf, read_size);
+        dump->segments[dump->segment_count]->size = read_size;
     }
     dump->segment_count += 1;
 }
@@ -102,6 +104,7 @@ void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, pag
     addr_t vadroot = vmi_get_eprocess_vadroot(vmi, eprocess);
     dump_layer_t dump;
     dump.pid = pid;
+    dump.rip = event->x86_regs->rip;
     dump.segment_count = 0;
     dump.segments = malloc(sizeof(vad_seg_t *) * SEG_COUNT_MAX);
     vad_iterator(vmi, vadroot, handle_node, &dump);

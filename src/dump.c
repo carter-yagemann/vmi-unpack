@@ -87,6 +87,10 @@ void *dump_worker_loop(void *data)
     char *filename;
     int dir_len = strlen(dump_output_dir);
     static int dump_count = 0;
+    const size_t MAX_LINE_LEN = 4096;
+    const char vad_header[] = "#:vaddr:size:offset:vadtype:isprivate:perm_bits:filename\n";
+    const char vad_line[] = ":%016lu:%lu:%lu:%d:%d:%d:%s\n";
+    char *line = malloc(MAX_LINE_LEN);
 
     while (1)
     {
@@ -109,13 +113,47 @@ void *dump_worker_loop(void *data)
         {
             printf("dump_worker_loop: starting dump of %s\n", filepath);
             ofile = fopen(filepath, "wb");
+            size_t written = 0;
             for (int i = 0; i < layer->segment_count; i++) {
-                fwrite(layer->segments[i]->buf,
-                       sizeof(char),
+                written = fwrite(layer->segments[i]->buf,
+                       1,
                        layer->segments[i]->size,
                        ofile);
+                if (written < layer->segments[i]->va_size) {
+                  off_t pad = layer->segments[i]->va_size - written;
+                  fseek(ofile, pad, SEEK_CUR);
+                }
             }
             fclose(ofile);
+            // if we are dumping more than one segment, create a map
+            if (layer->segment_count > 1) {
+              size_t bytes_total = 0;
+              size_t fn_len = strlen(filepath);
+              snprintf(filepath+fn_len, dir_len + LAYER_FILENAME_LEN - 1 - fn_len, ".map");
+              ofile = fopen(filepath, "wb");
+              memset(line, 0x0, MAX_LINE_LEN);
+              // only one entry point per program
+              snprintf(line, MAX_LINE_LEN-1, "#rip:%lu\n", layer->rip);
+              fwrite(line, 1, strlen(line), ofile);
+              // write generic header
+              snprintf(line, MAX_LINE_LEN-1, vad_header);
+              fwrite(line, 1, strlen(line), ofile);
+              for (int i = 0; i < layer->segment_count; i++) {
+                memset(line, 0x0, MAX_LINE_LEN);
+                snprintf(line, MAX_LINE_LEN-1, vad_line,
+                    layer->segments[i]->base_va,
+                    layer->segments[i]->va_size,
+                    bytes_total,
+                    -1, /* vadtype */
+                    -1, /* is VMA private */
+                    -1, /* VMA perms */
+                    "" /* filename for VMA, if its file mapped */
+                    );
+                fwrite(line, 1, strlen(line), ofile);
+                bytes_total += layer->segments[i]->va_size;
+              }
+              fclose(ofile);
+            }
             // add hash to seen_hashes
             hash = (unsigned char *) malloc(SHA256_DIGEST_LENGTH);
             memcpy(hash, layer->sha256, SHA256_DIGEST_LENGTH);
@@ -128,6 +166,7 @@ void *dump_worker_loop(void *data)
         free(filepath);
         free_layer(layer);
     }
+    free(line);
 
     return NULL;
 }

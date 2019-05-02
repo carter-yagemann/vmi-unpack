@@ -43,7 +43,8 @@ typedef struct
 {
     char *buf;
     addr_t base_va;
-    size_t size;
+    size_t size;    // size of buffer, size <= va_size
+    size_t va_size; // size of VMA area
 } vad_seg_t;
 
 typedef struct
