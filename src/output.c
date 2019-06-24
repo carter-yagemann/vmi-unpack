@@ -102,13 +102,14 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data) {
 void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat) {
     addr_t eprocess = windows_find_eprocess_pgd(vmi, event->x86_regs->cr3);
     addr_t vadroot = vmi_get_eprocess_vadroot(vmi, eprocess);
-    dump_layer_t dump;
-    dump.pid = pid;
-    dump.rip = event->x86_regs->rip;
-    dump.segment_count = 0;
-    dump.segments = malloc(sizeof(vad_seg_t *) * SEG_COUNT_MAX);
-    vad_iterator(vmi, vadroot, handle_node, &dump);
-    queue_vads_to_dump(&dump);
+    dump_layer_t* dump;
+    dump = malloc(sizeof(dump_layer_t));
+    dump->pid = pid;
+    dump->rip = event->x86_regs->rip;
+    dump->segment_count = 0;
+    dump->segments = malloc(sizeof(vad_seg_t *) * SEG_COUNT_MAX);
+    vad_iterator(vmi, vadroot, handle_node, dump);
+    queue_vads_to_dump(dump);
 }
 
 void vad_iterator(vmi_instance_t vmi, addr_t node, traverse_func func, void *data) {
