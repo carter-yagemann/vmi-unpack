@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -213,9 +214,17 @@ void add_eod()
 
 void stop_dump_thread()
 {
+    struct timespec t;
     add_eod();  // Signals dump worker to quit
 
-    pthread_join(dump_worker, NULL);
+    clock_gettime(CLOCK_REALTIME, &t);
+    t.tv_sec += 2;
+    if (pthread_timedjoin_np(dump_worker, NULL, &t) != 0)
+    {
+      pthread_cancel(dump_worker);
+      t.tv_sec += 2;
+      pthread_timedjoin_np(dump_worker, NULL, &t);
+    }
 
     free(dump_output_dir);
     sem_destroy(&dump_sem);
