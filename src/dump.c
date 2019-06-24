@@ -275,4 +275,5 @@ void queue_vads_to_dump(dump_layer_t *layer) {
     SHA256_Final(layer->sha256, &c);
     OPENSSL_cleanse(&c, sizeof(c));
     g_queue_push_tail(dump_queue, layer);
+    sem_post(&dump_sem);
 }
