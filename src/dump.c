@@ -116,6 +116,7 @@ void *dump_worker_loop(void *data)
             ofile = fopen(filepath, "wb");
             size_t written = 0;
             for (int i = 0; i < layer->segment_count; i++) {
+                if (layer->segments[i]->size == 0) continue;
                 written = fwrite(layer->segments[i]->buf,
                        1,
                        layer->segments[i]->size,
