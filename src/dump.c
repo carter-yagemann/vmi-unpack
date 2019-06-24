@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -115,6 +116,7 @@ void *dump_worker_loop(void *data)
             ofile = fopen(filepath, "wb");
             size_t written = 0;
             for (int i = 0; i < layer->segment_count; i++) {
+                if (layer->segments[i]->size == 0) continue;
                 written = fwrite(layer->segments[i]->buf,
                        1,
                        layer->segments[i]->size,
@@ -213,9 +215,17 @@ void add_eod()
 
 void stop_dump_thread()
 {
+    struct timespec t;
     add_eod();  // Signals dump worker to quit
 
-    pthread_join(dump_worker, NULL);
+    clock_gettime(CLOCK_REALTIME, &t);
+    t.tv_sec += 2;
+    if (pthread_timedjoin_np(dump_worker, NULL, &t) != 0)
+    {
+      pthread_cancel(dump_worker);
+      t.tv_sec += 2;
+      pthread_timedjoin_np(dump_worker, NULL, &t);
+    }
 
     free(dump_output_dir);
     sem_destroy(&dump_sem);
@@ -266,4 +276,5 @@ void queue_vads_to_dump(dump_layer_t *layer) {
     SHA256_Final(layer->sha256, &c);
     OPENSSL_cleanse(&c, sizeof(c));
     g_queue_push_tail(dump_queue, layer);
+    sem_post(&dump_sem);
 }
