@@ -39,12 +39,28 @@ GSList *seen_hashes;
 
 #define SEG_COUNT_MAX 100
 
+typedef enum
+{
+    VadNone,
+    VadDevicePhysicalMemory,
+    VadImageMap,
+    VadAwe,
+    VadWriteWatch,
+    VadLargePages,
+    VadRotatePhysical,
+    VadLargePageSection,
+} vadtype_t;
+
 typedef struct
 {
     char *buf;
     addr_t base_va;
     size_t size;    // size of buffer, size <= va_size
     size_t va_size; // size of VMA area
+    vadtype_t vadtype;
+    uint8_t isprivate;
+    uint8_t protection;
+    unicode_string_t filename;
 } vad_seg_t;
 
 typedef struct
