@@ -114,13 +114,13 @@ void *dump_worker_loop(void *data)
         {
             printf("dump_worker_loop: starting dump of %s\n", filepath);
             ofile = fopen(filepath, "wb");
-            size_t written = 0;
             for (int i = 0; i < layer->segment_count; i++) {
-                if (layer->segments[i]->size == 0) continue;
-                written = fwrite(layer->segments[i]->buf,
-                       1,
-                       layer->segments[i]->size,
-                       ofile);
+                size_t written = 0;
+                if (layer->segments[i]->size > 0)
+                  written = fwrite(layer->segments[i]->buf,
+                         1,
+                         layer->segments[i]->size,
+                         ofile);
                 if (written < layer->segments[i]->va_size) {
                   off_t pad = layer->segments[i]->va_size - written;
                   fseek(ofile, pad, SEEK_CUR);
