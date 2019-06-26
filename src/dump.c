@@ -136,6 +136,13 @@ void *dump_worker_loop(void *data)
                 }
             }
             fclose(ofile);
+
+            // TODO: switch to json output
+            // https://github.com/GNOME/json-glib/blob/master/json-glib/tests/builder.c
+            // also do this:
+            // json_generator_set_pretty(gen, TRUE);
+            // json_generator_set_pretty(gen, TRUE);
+
             // if we are dumping more than one segment, create a map
             if (layer->segment_count > 1)
             {
@@ -160,9 +167,9 @@ void *dump_worker_loop(void *data)
                              layer->segments[i]->base_va,
                              layer->segments[i]->va_size,
                              bytes_total,
-                             -1, /* vadtype */
-                             -1, /* is VMA private */
-                             -1, /* VMA perms */
+                             layer->segments[i]->vadtype,
+                             layer->segments[i]->isprivate,
+                             layer->segments[i]->protection,
                              vad_fn /* filename for VMA, if its file mapped */
                             );
                     fwrite(line, 1, strlen(line), ofile);
