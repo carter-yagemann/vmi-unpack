@@ -30,14 +30,16 @@
 
 // these are private to this source file
 static addr_t PsInitialSystemProcess = 0;
-static addr_t get_initial_system_process(vmi_instance_t vmi) {
-  if (PsInitialSystemProcess == 0)
-    if(vmi_read_addr_ksym(vmi, "PsInitialSystemProcess", &PsInitialSystemProcess) != VMI_SUCCESS)
-      return 0;
-  return PsInitialSystemProcess;
+static addr_t get_initial_system_process(vmi_instance_t vmi)
+{
+    if (PsInitialSystemProcess == 0)
+        if (vmi_read_addr_ksym(vmi, "PsInitialSystemProcess", &PsInitialSystemProcess) != VMI_SUCCESS)
+            return 0;
+    return PsInitialSystemProcess;
 }
 
-addr_t vmi_get_process_by_cr3(vmi_instance_t vmi, addr_t cr3) {
+addr_t vmi_get_process_by_cr3(vmi_instance_t vmi, addr_t cr3)
+{
     return windows_find_eprocess_pgd(vmi, cr3);
 }
 
@@ -110,39 +112,46 @@ addr_t windows_find_eprocess_pgd(vmi_instance_t vmi, addr_t pgd)
 //using g_hash_table_add(table, key);
 //
 //the caller must free the returned table with g_hash_table_destroy(table);
-GHashTable* vmi_get_all_pids_windows(vmi_instance_t vmi) {
-  vmi_pid_t pid;  //current pid
-  addr_t init_proc;  //ptr to eprocess of initial system process
-  addr_t eprocess;  //ptr to eprocess of current walked process
-  addr_t next_eprocess_list;  //ptr to eprocess's next_process ptr
-  addr_t tasks_offset = process_vmi_windows_rekall.eprocess_tasks;
+GHashTable *vmi_get_all_pids_windows(vmi_instance_t vmi)
+{
+    vmi_pid_t pid;  //current pid
+    addr_t init_proc;  //ptr to eprocess of initial system process
+    addr_t eprocess;  //ptr to eprocess of current walked process
+    addr_t next_eprocess_list;  //ptr to eprocess's next_process ptr
+    addr_t tasks_offset = process_vmi_windows_rekall.eprocess_tasks;
 
-  init_proc = get_initial_system_process(vmi);
-  if (!init_proc) {
-    fprintf(stderr, "vmi_get_all_pids: read of get_initial_system_process failed\n");
-    return NULL;
-  }
-  eprocess = init_proc;
-
-  GHashTable* all_pids = g_hash_table_new(g_direct_hash, g_direct_equal);
-  while (1) {
-    addr_t pid_ptr = eprocess + process_vmi_windows_rekall.eprocess_pid;
-    if (vmi_read_32_va(vmi, pid_ptr, 0, (uint32_t *) &pid) == VMI_SUCCESS) {
-      g_hash_table_add(all_pids, GINT_TO_POINTER(pid));
-    } else {
-      fprintf(stderr, "vmi_get_all_pids: read of pid failed\n");
+    init_proc = get_initial_system_process(vmi);
+    if (!init_proc)
+    {
+        fprintf(stderr, "vmi_get_all_pids: read of get_initial_system_process failed\n");
+        return NULL;
     }
+    eprocess = init_proc;
 
-    if (vmi_read_addr_va(vmi, eprocess + tasks_offset, 0, &next_eprocess_list) != VMI_SUCCESS) {
-      g_hash_table_destroy(all_pids);
-      fprintf(stderr, "vmi_get_all_pids: read of next_eprocess_list failed\n");
-      return NULL;
+    GHashTable *all_pids = g_hash_table_new(g_direct_hash, g_direct_equal);
+    while (1)
+    {
+        addr_t pid_ptr = eprocess + process_vmi_windows_rekall.eprocess_pid;
+        if (vmi_read_32_va(vmi, pid_ptr, 0, (uint32_t *) &pid) == VMI_SUCCESS)
+        {
+            g_hash_table_add(all_pids, GINT_TO_POINTER(pid));
+        }
+        else
+        {
+            fprintf(stderr, "vmi_get_all_pids: read of pid failed\n");
+        }
+
+        if (vmi_read_addr_va(vmi, eprocess + tasks_offset, 0, &next_eprocess_list) != VMI_SUCCESS)
+        {
+            g_hash_table_destroy(all_pids);
+            fprintf(stderr, "vmi_get_all_pids: read of next_eprocess_list failed\n");
+            return NULL;
+        }
+        eprocess = next_eprocess_list - tasks_offset;
+        if (eprocess == init_proc)
+            break;
     }
-    eprocess = next_eprocess_list - tasks_offset;
-    if (eprocess == init_proc)
-      break;
-  }
-  return all_pids;
+    return all_pids;
 }
 
 addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event)
@@ -162,7 +171,8 @@ addr_t vmi_current_process_windows(vmi_instance_t vmi, vmi_event_t *event)
     return process;
 }
 
-vmi_pid_t vmi_get_eprocess_pid(vmi_instance_t vmi, addr_t process) {
+vmi_pid_t vmi_get_eprocess_pid(vmi_instance_t vmi, addr_t process)
+{
     vmi_pid_t pid;
     addr_t eprocess_pid = process + process_vmi_windows_rekall.eprocess_pid;
     if (vmi_read_32_va(vmi, eprocess_pid, 0, (uint32_t *) &pid) != VMI_SUCCESS)
@@ -171,11 +181,13 @@ vmi_pid_t vmi_get_eprocess_pid(vmi_instance_t vmi, addr_t process) {
     return pid;
 }
 
-addr_t vmi_get_eprocess_vadroot(vmi_instance_t vmi, addr_t process) {
+addr_t vmi_get_eprocess_vadroot(vmi_instance_t vmi, addr_t process)
+{
     addr_t curr_vad = 0;
     addr_t eprocess_vadroot = process + process_vmi_windows_rekall.eprocess_vadroot;
     vmi_read_addr_va(vmi, eprocess_vadroot, 0, &curr_vad);
-    if (curr_vad) {
+    if (curr_vad)
+    {
         // root VAD is an _EX_FAST_REF, so the 3 least significant bits are a reference counter.
         curr_vad &= 0xFFFFFFFFFFFFFFF8;
     }
@@ -329,66 +341,74 @@ mem_seg_t vmi_current_find_segment_windows(vmi_instance_t vmi, vmi_event_t *even
 // get init proc
 // walk eprocess
 // print eprocess, pid, cr3
-void vmi_list_all_processes_windows(vmi_instance_t vmi, vmi_event_t *event) {
-  vmi_pid_t pid = 0;  //current pid
-  reg_t cr3 = 0;  //current cr3
-  char *name = NULL; //process name
-  addr_t kthread = 0; //current kthread
-  addr_t init_proc;  //ptr to eprocess of initial system process
-  addr_t eprocess = 0;  //ptr to eprocess of current walked process
-  addr_t next_eprocess_list;  //ptr to eprocess's next_process ptr
-  addr_t tasks_offset = process_vmi_windows_rekall.eprocess_tasks;
-  addr_t eprocess_offset = process_vmi_windows_rekall.kthread_process;
-  addr_t cr3_offset = process_vmi_windows_rekall.kprocess_pdbase;
-  addr_t pid_offset = process_vmi_windows_rekall.eprocess_pid;
-  addr_t name_offset = process_vmi_windows_rekall.eprocess_pname;
+void vmi_list_all_processes_windows(vmi_instance_t vmi, vmi_event_t *event)
+{
+    vmi_pid_t pid = 0;  //current pid
+    reg_t cr3 = 0;  //current cr3
+    char *name = NULL; //process name
+    addr_t kthread = 0; //current kthread
+    addr_t init_proc;  //ptr to eprocess of initial system process
+    addr_t eprocess = 0;  //ptr to eprocess of current walked process
+    addr_t next_eprocess_list;  //ptr to eprocess's next_process ptr
+    addr_t tasks_offset = process_vmi_windows_rekall.eprocess_tasks;
+    addr_t eprocess_offset = process_vmi_windows_rekall.kthread_process;
+    addr_t cr3_offset = process_vmi_windows_rekall.kprocess_pdbase;
+    addr_t pid_offset = process_vmi_windows_rekall.eprocess_pid;
+    addr_t name_offset = process_vmi_windows_rekall.eprocess_pname;
 
 
-  kthread = vmi_current_thread_windows(vmi, event);
-  if (kthread) {
-    if (vmi_read_addr_va(vmi, kthread + eprocess_offset, 0, &eprocess) == VMI_SUCCESS) {
-      vmi_read_addr_va(vmi, eprocess + cr3_offset, 0, &cr3);
-      vmi_read_32_va(vmi, eprocess + pid_offset, 0, (uint32_t *) &pid);
-      fprintf(stderr, "kthread=0x%lx eproc=0x%lx cr3=0x%lx pid=%d", kthread, eprocess, cr3, pid);
-      name = vmi_read_str_va(vmi, eprocess + name_offset, 0);
-      if (name) {
-        fprintf(stderr, " name=%s", name);
-        free(name);
-      }
-      fprintf(stderr, "\n");
+    kthread = vmi_current_thread_windows(vmi, event);
+    if (kthread)
+    {
+        if (vmi_read_addr_va(vmi, kthread + eprocess_offset, 0, &eprocess) == VMI_SUCCESS)
+        {
+            vmi_read_addr_va(vmi, eprocess + cr3_offset, 0, &cr3);
+            vmi_read_32_va(vmi, eprocess + pid_offset, 0, (uint32_t *) &pid);
+            fprintf(stderr, "kthread=0x%lx eproc=0x%lx cr3=0x%lx pid=%d", kthread, eprocess, cr3, pid);
+            name = vmi_read_str_va(vmi, eprocess + name_offset, 0);
+            if (name)
+            {
+                fprintf(stderr, " name=%s", name);
+                free(name);
+            }
+            fprintf(stderr, "\n");
+        }
     }
-  }
 
-  init_proc = get_initial_system_process(vmi);
-  if (!init_proc) {
-    fprintf(stderr, "%s: read of get_initial_system_process failed\n", __FUNCTION__);
-    return;
-  }
-  eprocess = init_proc;
-
-  while (1) {
-    pid = 0;
-    cr3 = 0;
-    next_eprocess_list = 0;
-    name = NULL;
-    vmi_read_addr_va(vmi, eprocess + cr3_offset, 0, &cr3);
-    vmi_read_32_va(vmi, eprocess + pid_offset, 0, (uint32_t *) &pid);
-    fprintf(stderr, "eproc=0x%lx cr3=0x%lx pid=%d", eprocess, cr3, pid);
-    name = vmi_read_str_va(vmi, eprocess + name_offset, 0);
-    if (name) {
-      fprintf(stderr, " name=%s", name);
-      free(name);
+    init_proc = get_initial_system_process(vmi);
+    if (!init_proc)
+    {
+        fprintf(stderr, "%s: read of get_initial_system_process failed\n", __FUNCTION__);
+        return;
     }
-    fprintf(stderr, "\n");
+    eprocess = init_proc;
 
-    if (vmi_read_addr_va(vmi, eprocess + tasks_offset, 0, &next_eprocess_list) != VMI_SUCCESS) {
-      fprintf(stderr, "%s: read of next_eprocess_list failed\n", __FUNCTION__);
-      break;
+    while (1)
+    {
+        pid = 0;
+        cr3 = 0;
+        next_eprocess_list = 0;
+        name = NULL;
+        vmi_read_addr_va(vmi, eprocess + cr3_offset, 0, &cr3);
+        vmi_read_32_va(vmi, eprocess + pid_offset, 0, (uint32_t *) &pid);
+        fprintf(stderr, "eproc=0x%lx cr3=0x%lx pid=%d", eprocess, cr3, pid);
+        name = vmi_read_str_va(vmi, eprocess + name_offset, 0);
+        if (name)
+        {
+            fprintf(stderr, " name=%s", name);
+            free(name);
+        }
+        fprintf(stderr, "\n");
+
+        if (vmi_read_addr_va(vmi, eprocess + tasks_offset, 0, &next_eprocess_list) != VMI_SUCCESS)
+        {
+            fprintf(stderr, "%s: read of next_eprocess_list failed\n", __FUNCTION__);
+            break;
+        }
+        eprocess = next_eprocess_list - tasks_offset;
+        if (eprocess == 0)
+            break;
+        if (eprocess == init_proc)
+            break;
     }
-    eprocess = next_eprocess_list - tasks_offset;
-    if (eprocess == 0)
-      break;
-    if (eprocess == init_proc)
-      break;
-  }
 }
