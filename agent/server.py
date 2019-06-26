@@ -34,6 +34,7 @@ from hashlib import sha256
 import libvirt
 from subprocess import Popen, call, check_output
 from time import sleep
+import xml.etree.ElementTree as ET
 if sys.version_info.major <= 2:
     from ConfigParser import RawConfigParser, NoOptionError
 else:
@@ -108,20 +109,40 @@ def run_cmd(cmd, async=False, sudo=False, logfile=None):
     else:
         return child.wait()
 
-def create_snapshot():
-    """Creates a snapshot of the target VM"""
-    tmp = tempfile.mkstemp(prefix='vmi-snapshot-')
+def get_disk_from_xml(data):
+    """Finds the disk defined in a libvirt XML file"""
+    xml = ET.fromstring(data)
+    disk_xpath = ".//disk[@device='disk']/source"
+    disk = xml.find(disk_xpath)
+    if disk is None:
+        return None
+    disk = disk.get('file')
+    log.debug('Disk: %s' % disk)
+    return disk
 
-    cmd = [utils['qemu-img'], 'create', '-f', 'qcow2', '-o',
-           'backing_file=' + str(config['vm_img']), tmp[1]]
+def create_snapshot(filename, snapname):
+    """Creates a snapshot of the target VM"""
+    cmd = [utils['qemu-img'], 'snapshot', '-c', snapname, filename]
     res = run_cmd(cmd)
     if res != 0:
         log.debug('qemu-img returned ' + str(res))
-        log.error('Failed to create image snapshot')
-        os.remove(tmp[1])
+        log.error('Failed to create snapshot')
         sys.exit(1)
 
-    return tmp[1]
+def revert_and_delete_snapshot(filename, snapname):
+    """Reverts a disk to a previous snapshot and then deletes it"""
+    cmd = [utils['qemu-img'], 'snapshot', '-a', snapname, filename]
+    res = run_cmd(cmd)
+    if res != 0:
+        log.debug('qemu-img returned ' + str(res))
+        log.error('Failed to revert snapshot')
+        sys.exit(1)
+    cmd = [utils['qemu-img'], 'snapshot', '-d', snapname, filename]
+    res = run_cmd(cmd)
+    if res != 0:
+        log.debug('qemu-img returned ' + str(res))
+        log.error('Failed to delete snapshot')
+        sys.exit(1)
 
 def init_socket():
     """Initialize the socket for sending samples to the guest VM"""
@@ -142,28 +163,37 @@ def run_sample(filepath):
         log.warning("Output directory for " + shasum + " already exists, skipping")
         return
 
-    log.debug("Preparing VM")
-    log.debug("Creating snapshot image")
-    snapshot = create_snapshot()
-
-    log.debug("Starting VM")
+    log.debug("Connecting to Xen")
     xen = libvirt.open('xen:///system')
     if xen == None:
-        print('Failed to open connection to xen:///system',
-              file=sys.stderr)
-        os.remove(snapshot)
+        log.error('Failed to open connection to xen:///system')
         sys.exit(1)
+
+    log.debug("Creating snapshot image")
     xmlconfig = open(config['xml_conf'], 'r').read()
+    vm_img = get_disk_from_xml(xmlconfig)
+    if vm_img is None:
+        log.error('Failed to extract disk filepath from libvirt XML')
+        xen.close()
+        sys.exit(1)
+    vm_img_name = os.path.basename(vm_img)
+    if len(vm_img_name) < 6 or vm_img_name[-6:] != '.qcow2':
+        log.error('VM image must be a .qcow2')
+        xen.close()
+        sys.exit(1)
+    create_snapshot(vm_img, 'vmi-unpack')
+
+    log.debug("Starting VM")
     try:
         guest = xen.createXML(xmlconfig, 0)
     except libvirt.libvirtError as ex:
         log.error("Failed to create gutest VM: %s" % str(ex))
-        os.remove(snapshot)
+        revert_and_delete_snapshot(vm_img, 'vmi-unpack')
+        xen.close()
         sys.exit(1)
     if guest == None:
-        print('Failed to create a domain from XML definition',
-              file=sys.stderr)
-        os.remove(snapshot)
+        log.error('Failed to create a domain from XML definition')
+        revert_and_delete_snapshot(vm_img, 'vmi-unpack')
         xen.close()
         sys.exit(1)
 
@@ -175,11 +205,9 @@ def run_sample(filepath):
         except socket.timeout:
             log.error("VM did not startup within timeout, aborting")
             guest.destroy()
-            if os.path.isfile(snapshot):
-                os.remove(snapshot)
+            revert_and_delete_snapshot(vm_img, 'vmi-unpack')
             xen.close()
             return
-
         log.debug("Connection from " + str(addr))
 
     log.debug("Starting unpacker")
@@ -207,7 +235,7 @@ def run_sample(filepath):
         res = unpacker.poll()
         if not res is None:
             if res == 0:
-                log.warning("Unpacker exited early")
+                log.info("Unpacker exited early")
             else:
                 log.debug("unpack exited with code " + str(res))
                 log.warning("Unpacker exited with error(s)")
@@ -228,8 +256,7 @@ def run_sample(filepath):
     else:
         os.rmdir(unpack_dir)
 
-    if os.path.isfile(snapshot):
-        os.remove(snapshot)
+    revert_and_delete_snapshot(vm_img, 'vmi-unpack')
     xen.close()
 
 def run_dir(dirpath):
@@ -303,14 +330,13 @@ def parse_conf(conf_fd):
             'use_sudo': config.getboolean('main', 'use_sudo'),
             'rekall':   config.get('main', 'rekall'),
             'xml_conf': config.get('main', 'xml_conf'),
-            'vm_img':   config.get('main', 'vm_img'),
         }
     except (NoOptionError, ValueError) as e:
         log.error('Configuration is missing parameters. See example.conf.')
         sys.exit(1)
 
     errors = False
-    for filepath in ['rekall', 'xml_conf', 'vm_img']:
+    for filepath in ['rekall', 'xml_conf']:
         if not os.path.isfile(settings[filepath]):
             log.error('Not a file: ' + str(settings[filepath]))
             errors = True
