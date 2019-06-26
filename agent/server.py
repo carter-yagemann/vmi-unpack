@@ -74,7 +74,7 @@ class DummyChild(object):
         """Dummy child doesn't need to be killed"""
         pass
 
-def run_cmd(cmd, async=False, sudo=False):
+def run_cmd(cmd, async=False, sudo=False, logfile=None):
     """Wrapper for subprocess.Popen that checks relevant configurations.
 
     Note that when simulate flag is checked, a DummyChild is used instead
@@ -85,6 +85,7 @@ def run_cmd(cmd, async=False, sudo=False):
     cmd -- Command array, as would be passed to Popen or call.
     async -- Whether this command should run async or not.
     sudo -- Whether command should be ran via sudo.
+    logfile -- If specified, a filepath to write stdout and stderr to.
 
     Return:
     Return code if async is False, otherwise a Popen object.
@@ -92,12 +93,15 @@ def run_cmd(cmd, async=False, sudo=False):
     if sudo:
         cmd = ['sudo'] + cmd
 
+    log.debug('Command: ' + ' '.join(cmd))
     if args.simulate:
-        log.debug('Command: ' + ' '.join(cmd))
         child = DummyChild()
     else:
-        fnull = open(os.devnull, 'w')
-        child = Popen(cmd, stdout=fnull, stderr=fnull)
+        if logfile:
+            fd = open(logfile, 'w')
+        else:
+            fd = open(os.devnull, 'w')
+        child = Popen(cmd, stdout=fd, stderr=fd)
 
     if async:
         return child
@@ -132,9 +136,6 @@ def init_socket():
 
 def run_sample(filepath):
     """Run this sample through VMI-Unpack"""
-
-    # TODO - Checking filetypes before sending samples to the client agent.
-
     shasum = sha256(open(filepath, 'rb').read()).hexdigest()
     res_dir = os.path.join(args.out_dir, shasum)
     if os.path.exists(res_dir):
@@ -152,8 +153,13 @@ def run_sample(filepath):
               file=sys.stderr)
         os.remove(snapshot)
         sys.exit(1)
-    xmlconfig = open(config['xml_conf'], 'r')
-    guest = xen.createXML(xmlconfig, 0)
+    xmlconfig = open(config['xml_conf'], 'r').read()
+    try:
+        guest = xen.createXML(xmlconfig, 0)
+    except libvirt.libvirtError as ex:
+        log.error("Failed to create gutest VM: %s" % str(ex))
+        os.remove(snapshot)
+        sys.exit(1)
     if guest == None:
         print('Failed to create a domain from XML definition',
               file=sys.stderr)
@@ -178,11 +184,13 @@ def run_sample(filepath):
 
     log.debug("Starting unpacker")
     unpack_dir = tempfile.mkdtemp(prefix='vmi-output-')
-    unpack_cmd = [utils['unpack'], '-d', vm_name, '-r', config['rekall'], '-o', unpack_dir, '-n', 'sample.exe', '-f']
+    unpack_log = os.path.join(unpack_dir, 'unpack.log')
+    unpack_cmd = [utils['unpack'], '-d', guest.name(), '-r', config['rekall'],
+                  '-o', unpack_dir, '-n', 'sample.exe', '-f']
     if config['use_sudo']:
-        unpacker = run_cmd(unpack_cmd, sudo=True, async=True)
+        unpacker = run_cmd(unpack_cmd, sudo=True, async=True, logfile=unpack_log)
     else:
-        unpacker = run_cmd(unpack_cmd, sudo=False, async=True)
+        unpacker = run_cmd(unpack_cmd, sudo=False, async=True, logfile=unpack_log)
 
     start = datetime.now()  # Mark the beginning of unpacking time
 
@@ -207,7 +215,7 @@ def run_sample(filepath):
 
     if unpacker.poll() is None:
         log.debug("Stopping unpack")
-        kill_cmd = [utils['killall'], '-9', 'unpack']
+        kill_cmd = [utils['killall'], 'unpack']
         if config['use_sudo']:
             run_cmd(kill_cmd, sudo=True)
         else:
@@ -242,9 +250,6 @@ def init_log(level):
     logger = logging.getLogger('vmi-unpack')
     logger.setLevel(level)
     return logger
-
-log = init_log(30)
-
 
 def lookup_bin(name):
     """Looks up the path to a bin using Linux environment variables. Not as
@@ -297,7 +302,7 @@ def parse_conf(conf_fd):
             'timeout':  config.getint('main', 'timeout'),
             'use_sudo': config.getboolean('main', 'use_sudo'),
             'rekall':   config.get('main', 'rekall'),
-            'xl_conf':  config.get('main', 'xl_conf'),
+            'xml_conf': config.get('main', 'xml_conf'),
             'vm_img':   config.get('main', 'vm_img'),
         }
     except (NoOptionError, ValueError) as e:
@@ -305,7 +310,7 @@ def parse_conf(conf_fd):
         sys.exit(1)
 
     errors = False
-    for filepath in ['rekall', 'xl_conf', 'vm_img']:
+    for filepath in ['rekall', 'xml_conf', 'vm_img']:
         if not os.path.isfile(settings[filepath]):
             log.error('Not a file: ' + str(settings[filepath]))
             errors = True
@@ -327,30 +332,29 @@ def parse_conf(conf_fd):
               'instead of actually running them')
 @click.option('-o', '--outdir', type=click.Path(), required=True,
               help='Path to store all output data and logs')
-@click.option('-s', '--sample', type=click.File('rb'), required=True,
-              help='Path to sample executable file to unpack')
-#@click.option('-d', '--domain', type=str, required=True,
-#              help='The name of the VM domain to use')
-#@click.option('-i', '--ip', type=str, required=True,
-#              help='The IPv4/IPv6 address of the VM guest OS')
-#@click.option('-r', '--rekall', type=click.File('r'), required=True,
-#              help='Path to rekall file that describes VM guest memory structures (OS specific)')
-def main(conf, loglevel, simulate, outdir, sample):  # , domain, ip, rekall):
+@click.option('-s', '--sample', type=click.Path(), required=True,
+              help='Path to sample file or directory of files to unpack')
+def main(conf, loglevel, simulate, outdir, sample):
     """Main method"""
-    global args, config, utils, sock
+    global args, config, utils, sock, log
 
+    log = init_log(loglevel)
+    args.loglevel = loglevel
     args.conf = conf
-    args.log_level = loglevel
     args.simulate = simulate
     args.out_dir = outdir
     args.sample = sample
 
-    log.setLevel(args.log_level)
     config = parse_conf(args.conf)
     utils = find_utils()
     sock = init_socket()
 
-    run_sample(args.sample)
+    if os.path.isfile(args.sample):
+        run_sample(args.sample)
+    elif os.path.isdir(args.sample):
+        run_dir(args.sample)
+    else:
+        log.error("%s is neither a file nor directory" % args.sample)
 
     try:
         sock.shutdown(socket.SHUT_RDWR)
