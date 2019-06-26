@@ -28,6 +28,8 @@
 
 #include <rekall_parser.h>
 
+#define CHECK_VAL(VAL) ({ if (VAL == G_MININT64) return 0; VAL; })
+
 JsonParser *parse_json(char *json_file)
 {
 
@@ -45,6 +47,19 @@ JsonParser *parse_json(char *json_file)
     }
 
     return parser;
+}
+
+gint64 get_int_from_jsonpath(const char *expr, JsonNode *root) {
+  gint64 val = G_MININT64;
+  JsonNode* result_n = json_path_query(expr, root, NULL);
+  JsonArray* result_a = json_node_get_array(result_n);
+  if (json_array_get_length(result_a) == 1) {
+    val = json_array_get_int_element(result_a, 0);
+  } else {
+    fprintf(stderr, "ERROR: Rekall Parser - Failed to locate JsonPath %s\n", expr);
+  }
+  g_object_unref(result_n);
+  return val;
 }
 
 bool parse_rekall_linux(linux_rekall_t *rekall, char *json_file)
@@ -290,6 +305,7 @@ bool parse_rekall_linux(linux_rekall_t *rekall, char *json_file)
 bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
 {
 
+    gint64 val;
     JsonParser *parser = parse_json(json_file);
 
     if (parser == NULL)
@@ -298,7 +314,8 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
         return 0;
     }
 
-    JsonReader *reader = json_reader_new(json_parser_get_root(parser));
+    JsonNode* root = json_parser_get_root(parser);
+    JsonReader *reader = json_reader_new(root);
 
     // kpcr->prcb
     if (!json_reader_read_member(reader, "$STRUCTS"))
@@ -328,7 +345,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kpcr_prcb = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // kpcr_currentthread
     json_reader_read_member(reader, "$STRUCTS");
@@ -354,7 +371,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kprcb_currentthread = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // kthread_process
     json_reader_read_member(reader, "$STRUCTS");
@@ -380,7 +397,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kthread_process = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // kprocess_pdbase
     json_reader_read_member(reader, "$STRUCTS");
@@ -406,7 +423,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kprocess_pdbase = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_pname
     json_reader_read_member(reader, "$STRUCTS");
@@ -432,7 +449,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_pname = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_pid
     json_reader_read_member(reader, "$STRUCTS");
@@ -450,7 +467,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_pid = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_parent_pid
     json_reader_read_member(reader, "$STRUCTS");
@@ -468,7 +485,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_parent_pid = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_tasks
     json_reader_read_member(reader, "$STRUCTS");
@@ -486,7 +503,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_tasks = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_vadroot
     json_reader_read_member(reader, "$STRUCTS");
@@ -504,7 +521,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_vadroot = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_leftchild
     json_reader_read_member(reader, "$STRUCTS");
@@ -530,7 +547,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->mmvad_leftchild = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_rightchild
     json_reader_read_member(reader, "$STRUCTS");
@@ -548,7 +565,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->mmvad_rightchild = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_startingvpn
     json_reader_read_member(reader, "$STRUCTS");
@@ -566,7 +583,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->mmvad_startingvpn = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_endingvpn
     json_reader_read_member(reader, "$STRUCTS");
@@ -585,7 +602,62 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     rekall->mmvad_endingvpn = json_reader_get_int_value(reader);
 
     g_object_unref(reader);
-    g_object_unref(parser);
 
+    // mmvad_controlarea
+    const char *controlarea_expr = "$['$STRUCTS']['_MMVAD'][1]['Subsection'][0]";
+    val = get_int_from_jsonpath(controlarea_expr, root);
+    rekall->mmvad_controlarea = CHECK_VAL(val);
+
+    // controlarea_fileobject
+    const char *fileobject_expr = "$['$STRUCTS']['_CONTROL_AREA'][1]['FilePointer'][0]";
+    val = get_int_from_jsonpath(fileobject_expr, root);
+    rekall->controlarea_fileobject = CHECK_VAL(val);
+
+    // fileobject_filename
+    const char *filename_expr = "$['$STRUCTS']['_FILE_OBJECT'][1]['FileName'][0]";
+    val = get_int_from_jsonpath(filename_expr, root);
+    rekall->fileobject_filename = CHECK_VAL(val);
+
+    // mmvad_flags
+    const char *flags_expr = "$['$STRUCTS']['_MMVAD'][1]['u'][0]";
+    val = get_int_from_jsonpath(flags_expr, root);
+    rekall->mmvad_flags = CHECK_VAL(val);
+
+    // mmvad_flags_sizeof
+    const char *flags_sizeof_expr = "$['$STRUCTS']['_MMVAD_FLAGS'][0]";
+    val = get_int_from_jsonpath(flags_sizeof_expr, root);
+    rekall->mmvad_flags_sizeof = CHECK_VAL(val);
+
+    // flags_vadtype_start
+    const char *vadtype_start_expr = "$['$STRUCTS']['_MMVAD_FLAGS'][1]['VadType'][1][1]['start_bit']";
+    val = get_int_from_jsonpath(vadtype_start_expr, root);
+    rekall->flags_vadtype_start = CHECK_VAL(val);
+
+    // flags_vadtype_end
+    const char *vadtype_end_expr = "$['$STRUCTS']['_MMVAD_FLAGS'][1]['VadType'][1][1]['end_bit']";
+    val = get_int_from_jsonpath(vadtype_end_expr, root);
+    rekall->flags_vadtype_end = CHECK_VAL(val);
+
+    // flags_isprivate_start
+    const char *isprivate_start_expr = "$['$STRUCTS']['_MMVAD_FLAGS'][1]['PrivateMemory'][1][1]['start_bit']";
+    val = get_int_from_jsonpath(isprivate_start_expr, root);
+    rekall->flags_isprivate_start = CHECK_VAL(val);
+
+    // flags_isprivate_end
+    const char *isprivate_end_expr = "$['$STRUCTS']['_MMVAD_FLAGS'][1]['PrivateMemory'][1][1]['end_bit']";
+    val = get_int_from_jsonpath(isprivate_end_expr, root);
+    rekall->flags_isprivate_end = CHECK_VAL(val);
+
+    // flags_protection_start
+    const char *protection_start_expr = "$['$STRUCTS']['_MMVAD_FLAGS'][1]['Protection'][1][1]['start_bit']";
+    val = get_int_from_jsonpath(protection_start_expr, root);
+    rekall->flags_protection_start = CHECK_VAL(val);
+
+    // flags_protection_end
+    const char *protection_end_expr = "$['$STRUCTS']['_MMVAD_FLAGS'][1]['Protection'][1][1]['end_bit']";
+    val = get_int_from_jsonpath(protection_end_expr, root);
+    rekall->flags_protection_end = CHECK_VAL(val);
+
+    g_object_unref(parser);
     return 1;
 }

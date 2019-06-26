@@ -55,6 +55,67 @@ void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_c
     printf("Done queueing dump: base_va: %p, size: %zu\n", (void *)(vma.base_va), vma.size);
 }
 
+uint64_t extract_field_value(uint64_t packed, uint64_t start, uint64_t end) {
+  packed >>= start;
+  gint64 mask = (1ULL << (end - start + 1)) - 1;
+  packed &= mask;
+  return packed;
+}
+
+void get_node_vadtype(vmi_instance_t vmi, addr_t node, vadtype_t *vadtype) {
+  uint64_t flags = 0;
+  uint64_t start = process_vmi_windows_rekall.flags_vadtype_start;
+  uint64_t end = process_vmi_windows_rekall.flags_vadtype_end;
+  vmi_read_64_va(vmi,
+      node + process_vmi_windows_rekall.mmvad_flags,
+      0, &flags);
+  *vadtype = (vadtype_t)extract_field_value(flags, start, end);
+}
+
+void get_node_isprivate(vmi_instance_t vmi, addr_t node, uint8_t *isprivate) {
+  uint64_t flags = 0;
+  uint64_t start = process_vmi_windows_rekall.flags_isprivate_start;
+  uint64_t end = process_vmi_windows_rekall.flags_isprivate_end;
+  vmi_read_64_va(vmi,
+      node + process_vmi_windows_rekall.mmvad_flags,
+      0, &flags);
+  *isprivate = (uint8_t)extract_field_value(flags, start, end);
+}
+
+void get_node_protection(vmi_instance_t vmi, addr_t node, uint8_t *protection) {
+  uint64_t flags = 0;
+  uint64_t start = process_vmi_windows_rekall.flags_protection_start;
+  uint64_t end = process_vmi_windows_rekall.flags_protection_end;
+  vmi_read_64_va(vmi,
+      node + process_vmi_windows_rekall.mmvad_flags,
+      0, &flags);
+  *protection = (uint8_t)extract_field_value(flags, start, end);
+}
+
+// you must free the returned string:
+//   free(fn_utf8.contents);
+void get_node_filename(vmi_instance_t vmi, addr_t node, unicode_string_t *fn_utf8) {
+  unicode_string_t *fn_ustr = NULL;
+  addr_t control_area = 0, file_object = 0, filename_ptr = 0;
+  vmi_read_addr_va(vmi,
+      node + process_vmi_windows_rekall.mmvad_controlarea,
+      0, &control_area);
+  if (control_area == 0) return;
+  vmi_read_addr_va(vmi,
+      control_area + process_vmi_windows_rekall.controlarea_fileobject,
+      0, &file_object);
+  if (file_object == 0) return;
+  file_object &= 0xFFFFFFFFFFFFFFF8; //because its an EX_FAST_REF
+  vmi_read_addr_va(vmi,
+      file_object + process_vmi_windows_rekall.fileobject_filename,
+      0, &filename_ptr);
+  if (filename_ptr == 0) return;
+  fn_ustr = vmi_read_unicode_str_va(vmi, filename_ptr, 0 /* pid=0 for kernel struct */);
+  if (fn_ustr == NULL) return;
+  vmi_convert_str_encoding(fn_ustr, fn_utf8, "UTF-8");
+  vmi_free_unicode_str(fn_ustr);
+}
+
 void handle_node(vmi_instance_t vmi, addr_t node, void *data)
 {
     dump_layer_t *dump = (dump_layer_t *)data;
@@ -99,6 +160,16 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data)
             realloc(dump->segments[dump->segment_count]->buf, read_size);
         dump->segments[dump->segment_count]->size = read_size;
     }
+    // filename
+    dump->segments[dump->segment_count]->filename = (const unicode_string_t){0};
+    get_node_filename(vmi, node, &(dump->segments[dump->segment_count]->filename));
+    // vadtype
+    get_node_vadtype(vmi, node, &(dump->segments[dump->segment_count]->vadtype));
+    // isprivate
+    get_node_isprivate(vmi, node, &(dump->segments[dump->segment_count]->isprivate));
+    // protection
+    get_node_protection(vmi, node, &(dump->segments[dump->segment_count]->protection));
+
     dump->segment_count += 1;
 }
 

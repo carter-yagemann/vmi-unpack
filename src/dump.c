@@ -77,6 +77,8 @@ void free_layer(dump_layer_t *layer)
             for (int i = 0; i < layer->segment_count; i++)
             {
                 free(layer->segments[i]->buf);
+                if (layer->segments[i]->filename.contents)
+                  free(layer->segments[i]->filename.contents);
                 free(layer->segments[i]);
             }
             free(layer->segments);
@@ -134,6 +136,13 @@ void *dump_worker_loop(void *data)
                 }
             }
             fclose(ofile);
+
+            // TODO: switch to json output
+            // https://github.com/GNOME/json-glib/blob/master/json-glib/tests/builder.c
+            // also do this:
+            // json_generator_set_pretty(gen, TRUE);
+            // json_generator_set_pretty(gen, TRUE);
+
             // if we are dumping more than one segment, create a map
             if (layer->segment_count > 1)
             {
@@ -151,14 +160,17 @@ void *dump_worker_loop(void *data)
                 for (int i = 0; i < layer->segment_count; i++)
                 {
                     memset(line, 0x0, MAX_LINE_LEN);
+                    char *vad_fn = "";
+                    if (layer->segments[i]->filename.contents)
+                      vad_fn = (char*)layer->segments[i]->filename.contents;
                     snprintf(line, MAX_LINE_LEN - 1, vad_line,
                              layer->segments[i]->base_va,
                              layer->segments[i]->va_size,
                              bytes_total,
-                             -1, /* vadtype */
-                             -1, /* is VMA private */
-                             -1, /* VMA perms */
-                             "" /* filename for VMA, if its file mapped */
+                             layer->segments[i]->vadtype,
+                             layer->segments[i]->isprivate,
+                             layer->segments[i]->protection,
+                             vad_fn /* filename for VMA, if its file mapped */
                             );
                     fwrite(line, 1, strlen(line), ofile);
                     bytes_total += layer->segments[i]->va_size;
