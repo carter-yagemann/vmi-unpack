@@ -76,12 +76,11 @@ Optional arguments:
 
 ## Output
 
-Every time the target process writes data to a page and then executes it, the memory
-segment that page belongs to will be extracted as a layer. Layers are written to the
-provided output directory in the form `<pid>-<layer>-<base_addr>-<rip>.bin` where
-`<layer>` starts at 0 and increments with each newly extracted layer, `<base_addr>`
-is the base virtual address of the extracted memory segment, and `<rip>` is the
-value of the program counter when the layer is first executed.
+Every time the target process writes data to a page and then executes it, a full memory
+dump will be taken for that process' userspace. When the dump includes more than one
+continuous chunk of memory, a `.map` file will also be written with meta-data like the
+file offset of each memory chunk, the virtual address each chunk came from, the value in
+the program counter, etc.
 
 ## Instrumentation
 
@@ -101,7 +100,7 @@ the agent setup and not libVMI, Xen, etc.
 The provided server agent is designed for Xen running on a Linux host and makes use of
 the following programs:
 
-* xl
+* libvirt
 
 * qemu-img
 
@@ -111,8 +110,10 @@ These should be installed on your host before continuing.
 
 Next, you need to create a configuration so the agent knows which virtual machine
 to use and where the relevant files are located. See `agent/example.conf` for a
-commented example. Note that the agent currently only supports using a single
-guest VM.
+commented example. The `xml_conf` should be a libvirt configuration. The easiest
+way to create one is to define a VM using virsh and then dump the XML.
+Note that the agent currently only supports using a single guest VM and its main
+storage file must be a QCOW2.
 
 The host is now ready.
 
@@ -127,25 +128,28 @@ retrieve samples. Therefore, this is the interface the server agent should be
 configured to bind to (`host_ip` in `agent/example.conf`).
 
 Unlike Cuckoo, you do not need a snapshot to use this agent. Once configured,
-the guest VM should be powered off. The `vm_img` parameter in the server agent
-configuration points to the VM's virtual disk and the agent will handle
-snapshots on its own.
+the guest VM should be powered off.
 
 ### Running Samples
 
 See `agent/server.py` for usage:
 
-    usage: server.py [-h] [-c CONF] [-l LOG_LEVEL] [-s] sample out_dir
-    
-    positional arguments:
-      sample                Path to sample file or directory of samples to unpack
-      out_dir               Directory to save results in
-    
-    optional arguments:
-      -h, --help            show this help message and exit
-      -c CONF, --conf CONF  Path to configuration (default: ./example.conf)
-      -l LOG_LEVEL, --log-level LOG_LEVEL
-                            Logging level (10: Debug, 20: Info, 30: Warning, 40:
-                            Error, 50: Critical) (default: Info)
-      -s, --simulate        Show commands that would run (logged at debug level)
-                            instead of actually running them
+```
+Usage: server.py [OPTIONS]
+
+  Main method
+
+Options:
+  -c, --conf FILENAME            Path to configuration (default:
+                                 ./example.conf)
+  -l, --log-level INTEGER RANGE  Logging level (10: Debug, 20: Info, 30:
+                                 Warning, 40: Error, 50: Critical) (default:
+                                 Info)
+  --dry-run                      Show commands that would run (logged at debug
+                                 level) instead of actually running them
+  -o, --outdir PATH              Path to store all output data and logs
+                                 [required]
+  -s, --sample PATH              Path to sample file or directory of files to
+                                 unpack  [required]
+  --help                         Show this message and exit.
+```
