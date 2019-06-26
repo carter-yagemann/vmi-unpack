@@ -25,7 +25,8 @@
 
 #include <libvmi/libvmi.h>
 
-typedef struct {
+typedef struct
+{
     char *buf;
     size_t size;
     vmi_pid_t pid;

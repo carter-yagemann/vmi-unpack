@@ -55,25 +55,27 @@ void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_c
     printf("Done queueing dump: base_va: %p, size: %zu\n", (void *)(vma.base_va), vma.size);
 }
 
-void handle_node(vmi_instance_t vmi, addr_t node, void *data) {
+void handle_node(vmi_instance_t vmi, addr_t node, void *data)
+{
     dump_layer_t *dump = (dump_layer_t *)data;
-    if (dump->segment_count >= SEG_COUNT_MAX) {
+    if (dump->segment_count >= SEG_COUNT_MAX)
+    {
         fprintf(stderr, "handle_node: skipping VAD, SEG_COUNT_MAX reached.\n");
         return;
     }
     addr_t start = 0, end = 0, base_va = 0, size = 0;
     if (vmi_read_addr_va(
-                         vmi,
-                         node + process_vmi_windows_rekall.mmvad_startingvpn,
-                         0,
-                         &start) != VMI_SUCCESS)
+            vmi,
+            node + process_vmi_windows_rekall.mmvad_startingvpn,
+            0,
+            &start) != VMI_SUCCESS)
         return;
     start <<= 12;
     if (vmi_read_addr_va(
-                         vmi,
-                         node + process_vmi_windows_rekall.mmvad_endingvpn,
-                         0,
-                         &end) != VMI_SUCCESS)
+            vmi,
+            node + process_vmi_windows_rekall.mmvad_endingvpn,
+            0,
+            &end) != VMI_SUCCESS)
         return;
     end <<= 12;
     if (!start || !end) return;
@@ -86,12 +88,13 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data) {
     dump->segments[dump->segment_count]->buf = malloc(size);
     size_t read_size = 0;
     vmi_read_va(
-                vmi,
-                base_va,
-                dump->pid,
-                size,
-                dump->segments[dump->segment_count]->buf, &read_size);
-    if (read_size < size) {
+        vmi,
+        base_va,
+        dump->pid,
+        size,
+        dump->segments[dump->segment_count]->buf, &read_size);
+    if (read_size < size)
+    {
         dump->segments[dump->segment_count]->buf =
             realloc(dump->segments[dump->segment_count]->buf, read_size);
         dump->segments[dump->segment_count]->size = read_size;
@@ -99,10 +102,11 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data) {
     dump->segment_count += 1;
 }
 
-void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat) {
+void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
+{
     addr_t eprocess = windows_find_eprocess_pgd(vmi, event->x86_regs->cr3);
     addr_t vadroot = vmi_get_eprocess_vadroot(vmi, eprocess);
-    dump_layer_t* dump;
+    dump_layer_t *dump;
     dump = malloc(sizeof(dump_layer_t));
     dump->pid = pid;
     dump->rip = event->x86_regs->rip;
@@ -112,22 +116,23 @@ void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, pag
     queue_vads_to_dump(dump);
 }
 
-void vad_iterator(vmi_instance_t vmi, addr_t node, traverse_func func, void *data) {
+void vad_iterator(vmi_instance_t vmi, addr_t node, traverse_func func, void *data)
+{
     addr_t left = 0, right = 0;
     if (vmi_read_addr_va(
-                         vmi,
-                         node + process_vmi_windows_rekall.mmvad_leftchild,
-                         0,
-                         &left) != VMI_SUCCESS)
+            vmi,
+            node + process_vmi_windows_rekall.mmvad_leftchild,
+            0,
+            &left) != VMI_SUCCESS)
         fprintf(stderr, "vad_iterator: Left node could not be read\n");
     if (left)
         vad_iterator(vmi, left, func, data);
     func(vmi, node, data);
     if (vmi_read_addr_va(
-                         vmi,
-                         node + process_vmi_windows_rekall.mmvad_rightchild,
-                         0,
-                         &right) != VMI_SUCCESS)
+            vmi,
+            node + process_vmi_windows_rekall.mmvad_rightchild,
+            0,
+            &right) != VMI_SUCCESS)
         fprintf(stderr, "vad_iterator: Right node could not be read\n");
     if (right)
         vad_iterator(vmi, right, func, data);
