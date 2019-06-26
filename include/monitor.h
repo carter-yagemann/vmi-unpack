@@ -44,7 +44,8 @@ GSList *pending_page_rescan;   // queue of table rescans
 GSList *pending_page_retrap;   // queue of userspace retraps
 GSList *cr3_callbacks;         // list of CR3 write callbacks
 
-typedef struct {
+typedef struct
+{
     mem_seg_t vma;
     addr_t paddr;
 } prev_vma_t;
@@ -62,18 +63,20 @@ typedef enum
 } page_cat_t;
 
 #define is_pagetable_page(cat) (\
-    cat == PAGE_CAT_PML4 ||\
-    cat == PAGE_CAT_PDPT ||\
-    cat == PAGE_CAT_PD ||\
-    cat == PAGE_CAT_PT)
+                                cat == PAGE_CAT_PML4 ||\
+                                cat == PAGE_CAT_PDPT ||\
+                                cat == PAGE_CAT_PD ||\
+                                cat == PAGE_CAT_PT)
 
 #define is_userspace_page(cat) (\
-    cat == PAGE_CAT_4KB_FRAME ||\
-    cat == PAGE_CAT_2MB_FRAME ||\
-    cat == PAGE_CAT_1GB_FRAME)
+                                cat == PAGE_CAT_4KB_FRAME ||\
+                                cat == PAGE_CAT_2MB_FRAME ||\
+                                cat == PAGE_CAT_1GB_FRAME)
 
-static inline const char* cat2str(page_cat_t cat) {
-    static const char* catname[] = {
+static inline const char *cat2str(page_cat_t cat)
+{
+    static const char *catname[] =
+    {
         "PAGE_CAT_NOT_SET",
         "PAGE_CAT_PML4",
         "PAGE_CAT_PDPT",
@@ -86,13 +89,14 @@ static inline const char* cat2str(page_cat_t cat) {
     return catname[cat];
 }
 
-static inline const char* access2str(vmi_event_t *evt) {
+static inline const char *access2str(vmi_event_t *evt)
+{
     if (evt->mem_event.out_access & VMI_MEMACCESS_X)
         return "VMI_MEMACCESS_X";
     if (evt->mem_event.out_access & VMI_MEMACCESS_W)
         return "VMI_MEMACCESS_W";
     return "VMI_MEMACCESS_UNKNOWN";
-} 
+}
 
 // args: vmi, event, pid, page category
 typedef void (*page_table_monitor_cb_t)(vmi_instance_t, vmi_event_t *, vmi_pid_t, page_cat_t);
@@ -113,23 +117,25 @@ typedef struct
     gpointer data;        //one extra pointer for anything else
 } foreach_data_t;
 
-typedef struct {
-  vmi_pid_t pid;
-  reg_t cr3;
-  uint8_t flags;
-  page_table_monitor_cb_t cb;
-  GHashTable *write_exec_map;
-  GHashTable *wr_traps;
+typedef struct
+{
+    vmi_pid_t pid;
+    reg_t cr3;
+    uint8_t flags;
+    page_table_monitor_cb_t cb;
+    GHashTable *write_exec_map;
+    GHashTable *wr_traps;
 } pid_events_t;
 
-typedef struct {
-  vmi_pid_t pid;
-  page_cat_t cat;
+typedef struct
+{
+    vmi_pid_t pid;
+    page_cat_t cat;
 } trapped_page_t;
 
 #define trace_trap(addr, trap, mesg) fprintf(stderr, \
-    "%s:trace_trap paddr=%p pid=%d cat=%s mesg=%s\n", \
-    __FUNCTION__, (gpointer)addr, trap->pid, cat2str(trap->cat), mesg)
+        "%s:trace_trap paddr=%p pid=%d cat=%s mesg=%s\n", \
+        __FUNCTION__, (gpointer)addr, trap->pid, cat2str(trap->cat), mesg)
 
 typedef struct
 {
@@ -139,7 +145,7 @@ typedef struct
     page_table_monitor_cb_t cb;
 } page_cb_event_t;
 
-pid_events_t* add_new_pid(vmi_pid_t pid);
+pid_events_t *add_new_pid(vmi_pid_t pid);
 
 /**
  * Initializes the page table monitor.
