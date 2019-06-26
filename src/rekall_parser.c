@@ -298,7 +298,8 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
         return 0;
     }
 
-    JsonReader *reader = json_reader_new(json_parser_get_root(parser));
+    JsonNode* root = json_parser_get_root(parser);
+    JsonReader *reader = json_reader_new(root);
 
     // kpcr->prcb
     if (!json_reader_read_member(reader, "$STRUCTS"))
@@ -328,7 +329,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kpcr_prcb = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // kpcr_currentthread
     json_reader_read_member(reader, "$STRUCTS");
@@ -354,7 +355,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kprcb_currentthread = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // kthread_process
     json_reader_read_member(reader, "$STRUCTS");
@@ -380,7 +381,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kthread_process = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // kprocess_pdbase
     json_reader_read_member(reader, "$STRUCTS");
@@ -406,7 +407,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->kprocess_pdbase = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_pname
     json_reader_read_member(reader, "$STRUCTS");
@@ -432,7 +433,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_pname = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_pid
     json_reader_read_member(reader, "$STRUCTS");
@@ -450,7 +451,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_pid = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_parent_pid
     json_reader_read_member(reader, "$STRUCTS");
@@ -468,7 +469,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_parent_pid = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_tasks
     json_reader_read_member(reader, "$STRUCTS");
@@ -486,7 +487,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_tasks = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // eprocess_vadroot
     json_reader_read_member(reader, "$STRUCTS");
@@ -504,7 +505,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->eprocess_vadroot = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_leftchild
     json_reader_read_member(reader, "$STRUCTS");
@@ -530,7 +531,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->mmvad_leftchild = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_rightchild
     json_reader_read_member(reader, "$STRUCTS");
@@ -548,7 +549,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->mmvad_rightchild = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_startingvpn
     json_reader_read_member(reader, "$STRUCTS");
@@ -566,7 +567,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     }
     rekall->mmvad_startingvpn = json_reader_get_int_value(reader);
     g_object_unref(reader);
-    reader = json_reader_new(json_parser_get_root(parser));
+    reader = json_reader_new(root);
 
     // mmvad_endingvpn
     json_reader_read_member(reader, "$STRUCTS");
