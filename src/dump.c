@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -27,12 +28,14 @@
 #include <semaphore.h>
 #include <glib.h>
 #include <openssl/sha.h>
+#include <openssl/crypto.h>
 
 #include <libvmi/libvmi.h>
 
 #include <dump.h>
 
 #define LAYER_FILENAME_LEN 128
+#define LAYER_FILENAME_PREFIX_LEN 4
 
 gint compare_hashes(gconstpointer a, gconstpointer b)
 {
@@ -49,33 +52,39 @@ gint compare_hashes(gconstpointer a, gconstpointer b)
     return 0;
 }
 
-char *gen_layer_filename(dump_layer_t *dump_layer)
+char *gen_layer_filename(dump_layer_t *dump_layer, int dump_count)
 {
-    uint64_t *layer_ptr;
-    vmi_pid_t pid = dump_layer->pid;
-    reg_t rip = dump_layer->rip;
-    reg_t base_addr = dump_layer->base;
-    int dir_len = strlen(dump_output_dir);
-
-    if (!g_hash_table_contains(pid_layer, &pid))
+    char *filename = calloc(LAYER_FILENAME_PREFIX_LEN + (SHA256_DIGEST_LENGTH * 2) + 1, sizeof(char));
+    char prefix[LAYER_FILENAME_PREFIX_LEN + 2];
+    prefix[LAYER_FILENAME_PREFIX_LEN + 1] = 0x0;
+    sprintf(prefix, "%%0%dd.", LAYER_FILENAME_PREFIX_LEN - 1);
+    sprintf(filename, prefix, dump_count);
+    char *offset = filename + LAYER_FILENAME_PREFIX_LEN;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
     {
-        vmi_pid_t *pid_ptr = (vmi_pid_t *) malloc(sizeof(vmi_pid_t));
-        *pid_ptr = pid;
-        layer_ptr = (uint64_t *) malloc(sizeof(uint64_t));
-        *layer_ptr = 0;
-        g_hash_table_insert(pid_layer, pid_ptr, layer_ptr);
+        sprintf(offset + (i * 2), "%02x", dump_layer->sha256[i]);
     }
-
-    layer_ptr = (uint64_t *) g_hash_table_lookup(pid_layer, &pid);
-
-    // format: <output_dir>/<pid>-<layer>-<base_addr>-<rip>.bin\0
-    char *filename = (char *) malloc(dir_len + LAYER_FILENAME_LEN);
-    snprintf(filename, LAYER_FILENAME_LEN, "%s%010d-%016lx-%016lx-%016lx.bin",
-             dump_output_dir, pid, *layer_ptr, base_addr, rip);
-
-    (*layer_ptr)++;
-
+    filename[LAYER_FILENAME_PREFIX_LEN + (SHA256_DIGEST_LENGTH * 2)] = 0x0;
     return filename;
+}
+
+void free_layer(dump_layer_t *layer)
+{
+    if (layer)
+    {
+        if (layer->segments)
+        {
+            for (int i = 0; i < layer->segment_count; i++)
+            {
+                free(layer->segments[i]->buf);
+                if (layer->segments[i]->filename.contents)
+                    free(layer->segments[i]->filename.contents);
+                free(layer->segments[i]);
+            }
+            free(layer->segments);
+        }
+        free(layer);
+    }
 }
 
 void *dump_worker_loop(void *data)
@@ -84,6 +93,12 @@ void *dump_worker_loop(void *data)
     FILE *ofile;
     unsigned char *hash;
     char *filename;
+    int dir_len = strlen(dump_output_dir);
+    static int dump_count = 0;
+    const size_t MAX_LINE_LEN = 4096;
+    const char vad_header[] = "#:vaddr:size:offset:vadtype:isprivate:perm_bits:filename\n";
+    const char vad_line[] = ":%016lu:%lu:%lu:%d:%d:%d:%s\n";
+    char *line = malloc(MAX_LINE_LEN);
 
     while (1)
     {
@@ -92,29 +107,89 @@ void *dump_worker_loop(void *data)
 
         layer = (dump_layer_t *) g_queue_pop_head(dump_queue);
 
-        if (layer->pid == 0 && layer->buff == NULL)
+        if (!layer)
         {
-            free(layer);
             break; // signal to stop
         }
 
         // Only dump the layer if we haven't seen the hash before
-        filename = gen_layer_filename(layer);
+        filename = gen_layer_filename(layer, dump_count);
+        char *filepath = (char *) malloc(dir_len + LAYER_FILENAME_LEN);
+        snprintf(filepath, dir_len + LAYER_FILENAME_LEN - 1, "%s%s", dump_output_dir, filename);
+        printf("dump_worker_loop: considering dump of %s\n", filepath);
         if (!g_slist_find_custom(seen_hashes, layer->sha256, compare_hashes))
         {
-            ofile = fopen(filename, "wb");
-            fwrite(layer->buff, sizeof(char), layer->size, ofile);
+            printf("dump_worker_loop: starting dump of %s\n", filepath);
+            ofile = fopen(filepath, "wb");
+            for (int i = 0; i < layer->segment_count; i++)
+            {
+                size_t written = 0;
+                if (layer->segments[i]->size > 0)
+                    written = fwrite(layer->segments[i]->buf,
+                                     1,
+                                     layer->segments[i]->size,
+                                     ofile);
+                if (written < layer->segments[i]->va_size)
+                {
+                    off_t pad = layer->segments[i]->va_size - written;
+                    fseek(ofile, pad, SEEK_CUR);
+                }
+            }
             fclose(ofile);
+
+            // TODO: switch to json output
+            // https://github.com/GNOME/json-glib/blob/master/json-glib/tests/builder.c
+            // also do this:
+            // json_generator_set_pretty(gen, TRUE);
+            // json_generator_set_pretty(gen, TRUE);
+
+            // if we are dumping more than one segment, create a map
+            if (layer->segment_count > 1)
+            {
+                size_t bytes_total = 0;
+                size_t fn_len = strlen(filepath);
+                snprintf(filepath + fn_len, dir_len + LAYER_FILENAME_LEN - 1 - fn_len, ".map");
+                ofile = fopen(filepath, "wb");
+                memset(line, 0x0, MAX_LINE_LEN);
+                // only one entry point per program
+                snprintf(line, MAX_LINE_LEN - 1, "#rip:%lu\n", layer->rip);
+                fwrite(line, 1, strlen(line), ofile);
+                // write generic header
+                snprintf(line, MAX_LINE_LEN - 1, vad_header);
+                fwrite(line, 1, strlen(line), ofile);
+                for (int i = 0; i < layer->segment_count; i++)
+                {
+                    memset(line, 0x0, MAX_LINE_LEN);
+                    char *vad_fn = "";
+                    if (layer->segments[i]->filename.contents)
+                        vad_fn = (char *)layer->segments[i]->filename.contents;
+                    snprintf(line, MAX_LINE_LEN - 1, vad_line,
+                             layer->segments[i]->base_va,
+                             layer->segments[i]->va_size,
+                             bytes_total,
+                             layer->segments[i]->vadtype,
+                             layer->segments[i]->isprivate,
+                             layer->segments[i]->protection,
+                             vad_fn /* filename for VMA, if its file mapped */
+                            );
+                    fwrite(line, 1, strlen(line), ofile);
+                    bytes_total += layer->segments[i]->va_size;
+                }
+                fclose(ofile);
+            }
             // add hash to seen_hashes
             hash = (unsigned char *) malloc(SHA256_DIGEST_LENGTH);
             memcpy(hash, layer->sha256, SHA256_DIGEST_LENGTH);
             seen_hashes = g_slist_prepend(seen_hashes, hash);
+            printf("dump_worker_loop: finished dump of %s\n", filepath);
+            dump_count++;
         }
 
         free(filename);
-        free(layer->buff);
-        free(layer);
+        free(filepath);
+        free_layer(layer);
     }
+    free(line);
 
     return NULL;
 }
@@ -153,14 +228,7 @@ void start_dump_thread(char *dir)
 
 void add_eod()
 {
-    dump_layer_t *layer;
-
-    layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
-    layer->pid = 0;
-    layer->rip = 0;
-    layer->base = 0;
-    layer->buff = NULL;
-    layer->size = 0;
+    dump_layer_t *layer = NULL;
     g_queue_push_tail(dump_queue, layer);
 
     sem_post(&dump_sem);
@@ -168,9 +236,17 @@ void add_eod()
 
 void stop_dump_thread()
 {
+    struct timespec t;
     add_eod();  // Signals dump worker to quit
 
-    pthread_join(dump_worker, NULL);
+    clock_gettime(CLOCK_REALTIME, &t);
+    t.tv_sec += 2;
+    if (pthread_timedjoin_np(dump_worker, NULL, &t) != 0)
+    {
+        pthread_cancel(dump_worker);
+        t.tv_sec += 2;
+        pthread_timedjoin_np(dump_worker, NULL, &t);
+    }
 
     free(dump_output_dir);
     sem_destroy(&dump_sem);
@@ -189,11 +265,40 @@ void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, re
     layer = (dump_layer_t *) malloc(sizeof(dump_layer_t));
     layer->pid = pid;
     layer->rip = rip;
-    layer->base = base;
-    layer->buff = buffer;
-    layer->size = size;
-    SHA256((unsigned char *) buffer, size, layer->sha256);
+    layer->segment_count = 1;
+    layer->segments = malloc(sizeof(vad_seg_t *) * 1);
+    layer->segments[0] = malloc(sizeof(vad_seg_t));
+    layer->segments[0]->base_va = base;
+    layer->segments[0]->buf = buffer;
+    layer->segments[0]->size = size;
+
+    SHA256_CTX c;
+    SHA256_Init(&c);
+    for (int i = 0; i < layer->segment_count; i++)
+    {
+        SHA256_Update(&c,
+                      (unsigned char *)layer->segments[i]->buf,
+                      layer->segments[i]->size);
+    }
+    SHA256_Final(layer->sha256, &c);
+    OPENSSL_cleanse(&c, sizeof(c));
     g_queue_push_tail(dump_queue, layer);
 
+    sem_post(&dump_sem);
+}
+
+void queue_vads_to_dump(dump_layer_t *layer)
+{
+    SHA256_CTX c;
+    SHA256_Init(&c);
+    for (int i = 0; i < layer->segment_count; i++)
+    {
+        SHA256_Update(&c,
+                      (unsigned char *)layer->segments[i]->buf,
+                      layer->segments[i]->size);
+    }
+    SHA256_Final(layer->sha256, &c);
+    OPENSSL_cleanse(&c, sizeof(c));
+    g_queue_push_tail(dump_queue, layer);
     sem_post(&dump_sem);
 }

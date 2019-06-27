@@ -43,8 +43,10 @@ uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
 /* Signal handler */
 static int interrupted = 0;
 static struct sigaction action;
+static sigset_t my_sigs;
 static void close_handler(int sig)
 {
+    fprintf(stderr, "close_handler() called\n");
     interrupted = sig;
 }
 
@@ -72,7 +74,9 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
     vmi_pid_t pid = vmi_current_pid(vmi, event);
     if (pid == process_pid)
     {
-        monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
+        fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
+        // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
+        monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
         monitor_remove_cr3(monitor_pid);
     }
 
@@ -86,9 +90,13 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
     if (name && !strncmp(name, process_name, strlen(name)))
     {
         vmi_pid_t pid = vmi_current_pid(vmi, event);
-        monitor_add_page_table(vmi, pid, process_layer, tracking_flags);
+        process_pid = pid;
+        fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
+        // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
+        monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
         monitor_remove_cr3(monitor_name);
     }
+    free(name);
 
     return VMI_EVENT_RESPONSE_NONE;
 }
@@ -139,7 +147,21 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    // Register signal handler.
+    // setup signal mask for worker threads, who will not be handling any signals
+    sigemptyset(&my_sigs);
+    sigaddset(&my_sigs, SIGTERM);
+    sigaddset(&my_sigs, SIGHUP);
+    sigaddset(&my_sigs, SIGINT);
+    sigaddset(&my_sigs, SIGALRM);
+    sigaddset(&my_sigs, SIGPIPE);
+    // block these signals in main thread and other threads
+    pthread_sigmask(SIG_BLOCK, &my_sigs, NULL);
+
+    // start all child threads below
+    start_dump_thread(output_dir);
+    // end child thread creation
+
+    // Register signal handler. only main thread will handle them.
     action.sa_handler = close_handler;
     action.sa_flags = 0;
     sigemptyset(&action.sa_mask);
@@ -147,6 +169,9 @@ int main(int argc, char *argv[])
     sigaction(SIGHUP,  &action, NULL);
     sigaction(SIGINT,  &action, NULL);
     sigaction(SIGALRM, &action, NULL);
+    sigaction(SIGPIPE, &action, NULL);
+    // unblock these signals in main thread
+    pthread_sigmask(SIG_UNBLOCK, &my_sigs, NULL);
 
     // Initialize libVMI
     vmi_instance_t vmi;
@@ -156,7 +181,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "ERROR: libVMI - Failed to initialize libVMI.\n");
         if (vmi != NULL)
         {
-            vmi_destroy(vmi);
+            //vmi_destroy(vmi);
         }
         return EXIT_FAILURE;
     }
@@ -178,7 +203,6 @@ int main(int argc, char *argv[])
     }
 
     // Initialize various helper methods
-    start_dump_thread(output_dir);
     if (!process_vmi_init(vmi, rekall))
     {
         fprintf(stderr, "ERROR: Unpack - Failed to initialize process VMI\n");
@@ -198,13 +222,24 @@ int main(int argc, char *argv[])
             fprintf(stderr, "ERROR: libVMI - Unexpected error while waiting for VMI events, quitting.\n");
             interrupted = 1;
         }
+
+        // Exit if all our watched processes have exited
+        if (process_pid)
+        {
+            if (g_hash_table_size(vmi_events_by_pid) == 0)
+            {
+                interrupted = 1;
+            }
+        }
     }
 
     // Cleanup
+    stop_dump_thread();
+    fprintf(stderr, "dump thread stopped\n");
     monitor_destroy(vmi);
     process_vmi_destroy(vmi);
-    stop_dump_thread();
 
     vmi_destroy(vmi);
+    fprintf(stderr, "doing clean exit\n");
     return EXIT_SUCCESS;
 }

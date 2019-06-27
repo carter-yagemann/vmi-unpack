@@ -21,7 +21,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import argparse
+from __future__ import print_function
+
+import click
 import logging
 import os
 import socket
@@ -29,12 +31,22 @@ import sys
 import tempfile
 from datetime import datetime
 from hashlib import sha256
+import libvirt
 from subprocess import Popen, call, check_output
 from time import sleep
+import xml.etree.ElementTree as ET
 if sys.version_info.major <= 2:
     from ConfigParser import RawConfigParser, NoOptionError
 else:
     from configparser import RawConfigParser, NoOptionError
+
+
+class Args(object):
+    pass
+
+args = Args()
+log = None
+
 
 class DummyChild(object):
     """A dummy Popen object used in simulation mode"""
@@ -63,7 +75,7 @@ class DummyChild(object):
         """Dummy child doesn't need to be killed"""
         pass
 
-def run_cmd(cmd, async=False, sudo=False):
+def run_cmd(cmd, async=False, sudo=False, logfile=None):
     """Wrapper for subprocess.Popen that checks relevant configurations.
 
     Note that when simulate flag is checked, a DummyChild is used instead
@@ -74,6 +86,7 @@ def run_cmd(cmd, async=False, sudo=False):
     cmd -- Command array, as would be passed to Popen or call.
     async -- Whether this command should run async or not.
     sudo -- Whether command should be ran via sudo.
+    logfile -- If specified, a filepath to write stdout and stderr to.
 
     Return:
     Return code if async is False, otherwise a Popen object.
@@ -81,79 +94,55 @@ def run_cmd(cmd, async=False, sudo=False):
     if sudo:
         cmd = ['sudo'] + cmd
 
+    log.debug('Command: ' + ' '.join(cmd))
     if args.simulate:
-        log.debug('Command: ' + ' '.join(cmd))
         child = DummyChild()
     else:
-        fnull = open(os.devnull, 'w')
-        child = Popen(cmd, stdout=fnull, stderr=fnull)
+        if logfile:
+            fd = open(logfile, 'w')
+        else:
+            fd = open(os.devnull, 'w')
+        child = Popen(cmd, stdout=fd, stderr=fd)
 
     if async:
         return child
     else:
         return child.wait()
 
-def create_snapshot():
-    """Creates a snapshot of the target VM"""
-    tmp = tempfile.mkstemp(prefix='vmi-snapshot-')
+def get_disk_from_xml(data):
+    """Finds the disk defined in a libvirt XML file"""
+    xml = ET.fromstring(data)
+    disk_xpath = ".//disk[@device='disk']/source"
+    disk = xml.find(disk_xpath)
+    if disk is None:
+        return None
+    disk = disk.get('file')
+    log.debug('Disk: %s' % disk)
+    return disk
 
-    cmd = [utils['qemu-img'], 'create', '-f', 'qcow2', '-o',
-           'backing_file=' + str(config['vm_img']), tmp[1]]
+def create_snapshot(filename, snapname):
+    """Creates a snapshot of the target VM"""
+    cmd = [utils['qemu-img'], 'snapshot', '-c', snapname, filename]
     res = run_cmd(cmd)
     if res != 0:
         log.debug('qemu-img returned ' + str(res))
-        log.error('Failed to create image snapshot')
-        os.remove(tmp[1])
+        log.error('Failed to create snapshot')
         sys.exit(1)
 
-    return tmp[1]
-
-def create_xl_config(snapshot):
-    """Creates a XL config based on the provided config with the HDD changed
-       to the snapshot image."""
-    tmp = tempfile.mkstemp(prefix='vmi-xl-')
-    ofile = os.fdopen(tmp[0], 'w')
-    name = ''
-
-    with open(config['xl_conf']) as ifile:
-        for line in ifile:
-            if len(line) >= 4 and line[:4] == 'disk':
-                continue
-            if len(line) >= 4 and line[:4] == 'name':
-                name = str(line).split(' ')[-1].strip()[1:-1]
-                log.debug("Found name: " + name)
-            ofile.write(line)
-    ofile.write("disk = ['tap:qcow2:" + str(snapshot) + ",hda,w']\n")
-    ofile.close()
-
-    return (name, tmp[1])
-
-def kill_vm(name):
-    """Checks XL and if a VM by the provided name is running, it's destroyed.
-
-    This process is special, so it doesn't use the run_cmd wrapper, but it's
-    still simulate safe.
-    """
-    cmd = [utils['xl'], 'list']
-    if config['use_sudo']:
-        cmd = ['sudo'] + cmd
-
-    res = check_output(cmd).split(b"\n")
-
-    running = False
-    for line in res:
-        vm = line.split(b" ")[0].decode()
-        log.debug(vm + " =? " + name)
-        if vm == name:
-            running = True
-            break
-
-    if not running:
-        return
-
-    cmd = cmd[:-1] + ['destroy', name]
-    log.debug('Command: ' + ' '.join(cmd))
-    call(cmd)
+def revert_and_delete_snapshot(filename, snapname):
+    """Reverts a disk to a previous snapshot and then deletes it"""
+    cmd = [utils['qemu-img'], 'snapshot', '-a', snapname, filename]
+    res = run_cmd(cmd)
+    if res != 0:
+        log.debug('qemu-img returned ' + str(res))
+        log.error('Failed to revert snapshot')
+        sys.exit(1)
+    cmd = [utils['qemu-img'], 'snapshot', '-d', snapname, filename]
+    res = run_cmd(cmd)
+    if res != 0:
+        log.debug('qemu-img returned ' + str(res))
+        log.error('Failed to delete snapshot')
+        sys.exit(1)
 
 def init_socket():
     """Initialize the socket for sending samples to the guest VM"""
@@ -168,32 +157,44 @@ def init_socket():
 
 def run_sample(filepath):
     """Run this sample through VMI-Unpack"""
-
-    # TODO - Checking filetypes before sending samples to the client agent.
-
     shasum = sha256(open(filepath, 'rb').read()).hexdigest()
     res_dir = os.path.join(args.out_dir, shasum)
     if os.path.exists(res_dir):
         log.warning("Output directory for " + shasum + " already exists, skipping")
         return
 
-    log.debug("Preparing VM")
+    log.debug("Connecting to Xen")
+    xen = libvirt.open('xen:///system')
+    if xen == None:
+        log.error('Failed to open connection to xen:///system')
+        sys.exit(1)
+
     log.debug("Creating snapshot image")
-    snapshot = create_snapshot()
-    log.debug("Creating snapshot XL config")
-    vm_name, xl_conf = create_xl_config(snapshot)
+    xmlconfig = open(config['xml_conf'], 'r').read()
+    vm_img = get_disk_from_xml(xmlconfig)
+    if vm_img is None:
+        log.error('Failed to extract disk filepath from libvirt XML')
+        xen.close()
+        sys.exit(1)
+    vm_img_name = os.path.basename(vm_img)
+    if len(vm_img_name) < 6 or vm_img_name[-6:] != '.qcow2':
+        log.error('VM image must be a .qcow2')
+        xen.close()
+        sys.exit(1)
+    create_snapshot(vm_img, 'vmi-unpack')
 
     log.debug("Starting VM")
-    xl_cmd = [utils['xl'], 'create', xl_conf]
-    if config['use_sudo']:
-        res = run_cmd(xl_cmd, sudo=True)
-    else:
-        res = run_cmd(xl_cmd, sudo=False)
-    if res != 0:
-        log.debug("xl returned " + str(res))
-        log.info("Failed to start VM")
-        os.remove(xl_conf)
-        os.remove(snapshot)
+    try:
+        guest = xen.createXML(xmlconfig, 0)
+    except libvirt.libvirtError as ex:
+        log.error("Failed to create gutest VM: %s" % str(ex))
+        revert_and_delete_snapshot(vm_img, 'vmi-unpack')
+        xen.close()
+        sys.exit(1)
+    if guest == None:
+        log.error('Failed to create a domain from XML definition')
+        revert_and_delete_snapshot(vm_img, 'vmi-unpack')
+        xen.close()
         sys.exit(1)
 
     if not args.simulate:  # Cannot simulate socket I/O
@@ -203,22 +204,21 @@ def run_sample(filepath):
             conn, addr = sock.accept()
         except socket.timeout:
             log.error("VM did not startup within timeout, aborting")
-            kill_vm(vm_name)
-            if os.path.isfile(xl_conf):
-                os.remove(xl_conf)
-            if os.path.isfile(snapshot):
-                os.remove(snapshot)
+            guest.destroy()
+            revert_and_delete_snapshot(vm_img, 'vmi-unpack')
+            xen.close()
             return
-
         log.debug("Connection from " + str(addr))
 
     log.debug("Starting unpacker")
     unpack_dir = tempfile.mkdtemp(prefix='vmi-output-')
-    unpack_cmd = [utils['unpack'], '-d', vm_name, '-r', config['rekall'], '-o', unpack_dir, '-n', 'sample.exe', '-f']
+    unpack_log = os.path.join(unpack_dir, 'unpack.log')
+    unpack_cmd = [utils['unpack'], '-d', guest.name(), '-r', config['rekall'],
+                  '-o', unpack_dir, '-n', 'sample.exe', '-f']
     if config['use_sudo']:
-        unpacker = run_cmd(unpack_cmd, sudo=True, async=True)
+        unpacker = run_cmd(unpack_cmd, sudo=True, async=True, logfile=unpack_log)
     else:
-        unpacker = run_cmd(unpack_cmd, sudo=False, async=True)
+        unpacker = run_cmd(unpack_cmd, sudo=False, async=True, logfile=unpack_log)
 
     start = datetime.now()  # Mark the beginning of unpacking time
 
@@ -235,7 +235,7 @@ def run_sample(filepath):
         res = unpacker.poll()
         if not res is None:
             if res == 0:
-                log.warning("Unpacker exited early")
+                log.info("Unpacker exited early")
             else:
                 log.debug("unpack exited with code " + str(res))
                 log.warning("Unpacker exited with error(s)")
@@ -243,12 +243,12 @@ def run_sample(filepath):
 
     if unpacker.poll() is None:
         log.debug("Stopping unpack")
-        kill_cmd = [utils['killall'], '-9', 'unpack']
+        kill_cmd = [utils['killall'], 'unpack']
         if config['use_sudo']:
             run_cmd(kill_cmd, sudo=True)
         else:
             run_cmd(kill_cmd, sudo=False)
-    kill_vm(vm_name)
+    guest.destroy()
 
     log.debug("Storing results")
     if not args.simulate:  # There are no results if commands were simulated
@@ -256,10 +256,8 @@ def run_sample(filepath):
     else:
         os.rmdir(unpack_dir)
 
-    if os.path.isfile(xl_conf):
-        os.remove(xl_conf)
-    if os.path.isfile(snapshot):
-        os.remove(snapshot)
+    revert_and_delete_snapshot(vm_img, 'vmi-unpack')
+    xen.close()
 
 def run_dir(dirpath):
     """Run samples in the provided directory"""
@@ -298,12 +296,12 @@ def find_utils():
     """Find all the utilities used by this script"""
     utils = dict()
 
-    for bin in ['xl', 'qemu-img', 'killall']:
-        res = lookup_bin(bin)
+    for bin_ in ['qemu-img', 'killall']:
+        res = lookup_bin(bin_)
         if not res:
-            log.error('Cannot find required program: ' + str(bin))
+            log.error('Cannot find required program: ' + str(bin_))
             sys.exit(1)
-        utils[bin] = res
+        utils[bin_] = res
 
     # unpack is special because its apart of this project so we'll try looking
     # in a few places for it along with PATH.
@@ -319,10 +317,10 @@ def find_utils():
 
     return utils
 
-def parse_conf(conf_path):
+def parse_conf(conf_fd):
     """Parse configuration file"""
     config = RawConfigParser()
-    config.read(conf_path)
+    config.readfp(conf_fd)
 
     try:
         settings = {
@@ -331,15 +329,14 @@ def parse_conf(conf_path):
             'timeout':  config.getint('main', 'timeout'),
             'use_sudo': config.getboolean('main', 'use_sudo'),
             'rekall':   config.get('main', 'rekall'),
-            'xl_conf':  config.get('main', 'xl_conf'),
-            'vm_img':   config.get('main', 'vm_img'),
+            'xml_conf': config.get('main', 'xml_conf'),
         }
     except (NoOptionError, ValueError) as e:
         log.error('Configuration is missing parameters. See example.conf.')
         sys.exit(1)
 
     errors = False
-    for filepath in ['rekall', 'xl_conf', 'vm_img']:
+    for filepath in ['rekall', 'xml_conf']:
         if not os.path.isfile(settings[filepath]):
             log.error('Not a file: ' + str(settings[filepath]))
             errors = True
@@ -349,52 +346,41 @@ def parse_conf(conf_path):
 
     return settings
 
-def parse_args():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--conf', type=str, default='./example.conf',
-                        help='Path to configuration (default: ./example.conf)')
-    parser.add_argument('-l', '--log-level', type=int, default=20,
-                        help='Logging level (10: Debug, 20: Info, 30: Warning, 40: Error, 50: Critical) (default: Info)')
-    parser.add_argument('-s', '--simulate', action='store_true', default=False,
-                        help='Show commands that would run (logged at debug level) instead of actually running them')
-    parser.add_argument('sample', type=str,
-                        help='Path to sample file or directory of samples to unpack')
-    parser.add_argument('out_dir', type=str,
-                        help='Directory to save results in')
 
-    args = parser.parse_args()
-
-    errors = False
-    if not os.path.isfile(args.conf):
-        log.error('Cannot find file: ' + str(args.conf))
-        errors = True
-    if not os.path.exists(args.sample):
-        log.error('Does not exist: ' + str(args.sample))
-        errors = True
-    if not os.path.isdir(args.out_dir):
-        log.error("Cannot find directory: " + str(args.out_dir))
-        errors = True
-    if errors:
-        sys.exit(1)
-
-    return args
-
-def main():
+@click.command()
+@click.option('-c', '--conf', type=click.File('r'), default='./example.conf',
+              help='Path to configuration (default: ./example.conf)')
+@click.option('-l', '--log-level', 'loglevel', type=click.IntRange(0, 50, clamp=True), default=20,
+              help='Logging level (10: Debug, 20: Info, 30: Warning, '
+              '40: Error, 50: Critical) (default: Info)')
+@click.option('--dry-run', 'simulate', is_flag=True,
+              help='Show commands that would run (logged at debug level) '
+              'instead of actually running them')
+@click.option('-o', '--outdir', type=click.Path(), required=True,
+              help='Path to store all output data and logs')
+@click.option('-s', '--sample', type=click.Path(), required=True,
+              help='Path to sample file or directory of files to unpack')
+def main(conf, loglevel, simulate, outdir, sample):
     """Main method"""
-    global log, args, config, utils, sock
+    global args, config, utils, sock, log
 
-    log = init_log(30)
-    args = parse_args()
-    log.setLevel(args.log_level)
-    utils = find_utils()
+    log = init_log(loglevel)
+    args.loglevel = loglevel
+    args.conf = conf
+    args.simulate = simulate
+    args.out_dir = outdir
+    args.sample = sample
+
     config = parse_conf(args.conf)
+    utils = find_utils()
     sock = init_socket()
 
     if os.path.isfile(args.sample):
         run_sample(args.sample)
-    else:
+    elif os.path.isdir(args.sample):
         run_dir(args.sample)
+    else:
+        log.error("%s is neither a file nor directory" % args.sample)
 
     try:
         sock.shutdown(socket.SHUT_RDWR)

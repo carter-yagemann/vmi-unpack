@@ -1,46 +1,36 @@
 language: c
 
 sudo: required
-dist: trusty
+dist: xenial
 
 addons:
   apt:
     packages:
-      - build-essential
-      - libssl-dev
-      - libglib2.0-dev
-      - libjson-glib-dev
-      - libxen-dev
-      - libxc-dev
-      - libxenstore3.0
       - bison
-      - libbison-dev
+      - build-essential
+      - doxygen
       - flex
-      - git
-      - python
-      - python-pip
-      - python3
+      - libbison-dev
       - libcunit1-dev
+      - libglib2.0-dev
+      - libjson-c-dev
+      - libjson-glib-dev
+      - libssl-dev
+      - libvirt-dev
+      - libxc-dev
+      - libxen-dev
+      - libxenstore3.0
+      - libyajl-dev
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
-  - cd $HOME/libvmi && $HOME/libvmi/autogen.sh
-  - cd $HOME/libvmi && $HOME/libvmi/configure --disable-kvm
-  - cd $HOME/libvmi && make
-  - cd $HOME/libvmi && sudo make install
-  - sudo pip install rekall-core rekall
+  - mkdir $HOME/libvmi/build
+  - cd $HOME/libvmi/build && cmake ..
+  - cd $HOME/libvmi/build && make
+  - cd $HOME/libvmi/build && sudo make install
 
 matrix:
   include:
-
-    - os: linux
-      env:
-        - TEST="Make"
-      script:
-        - cd $TRAVIS_BUILD_DIR
-        - make
-        - make tools
-        - make debug
 
     - os: linux
       env:
@@ -59,8 +49,17 @@ matrix:
 
     - os: linux
       env:
+        - TEST="Make"
+      script:
+        - cd $TRAVIS_BUILD_DIR
+        - make
+        - make tools
+        - make debug
+
+    - os: linux
+      env:
         - TEST="Agent"
       script:
         - cd ${TRAVIS_BUILD_DIR}/agent
-        - python2 server.py -h
-        - python3 server.py -h
+        - sudo pip install -Ur requirements.txt
+        - python server.py --help

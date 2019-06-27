@@ -81,6 +81,17 @@ void test_windows_rekall()
     CU_ASSERT(rekall.mmvad_rightchild == 16);
     CU_ASSERT(rekall.mmvad_startingvpn == 24);
     CU_ASSERT(rekall.mmvad_endingvpn == 32);
+    CU_ASSERT(rekall.mmvad_controlarea == 72);
+    CU_ASSERT(rekall.controlarea_fileobject == 64);
+    CU_ASSERT(rekall.fileobject_filename == 88);
+    CU_ASSERT(rekall.mmvad_flags == 40);
+    CU_ASSERT(rekall.mmvad_flags_sizeof == 8);
+    CU_ASSERT(rekall.flags_vadtype_start == 52);
+    CU_ASSERT(rekall.flags_vadtype_end == 55);
+    CU_ASSERT(rekall.flags_isprivate_start == 63);
+    CU_ASSERT(rekall.flags_isprivate_end == 64);
+    CU_ASSERT(rekall.flags_protection_start == 56);
+    CU_ASSERT(rekall.flags_protection_end == 61);
 }
 
 /* DUMP */

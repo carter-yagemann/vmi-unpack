@@ -25,6 +25,7 @@ import os
 import socket
 import sys
 from subprocess import check_output, Popen
+from time import sleep
 
 def default_gateway():
     """Gets the default gateway in Windows"""
@@ -38,6 +39,8 @@ def default_gateway():
     return str(gateway).strip()
 
 def main():
+    sleep(10)  # Allow time for VM to startup
+
     os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
     gateway = default_gateway()

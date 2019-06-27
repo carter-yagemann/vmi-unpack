@@ -25,6 +25,15 @@
 
 #include <libvmi/libvmi.h>
 
+typedef struct
+{
+    char *buf;
+    size_t size;
+    vmi_pid_t pid;
+} pe_dump_t;
+
+typedef void (*traverse_func)(vmi_instance_t, addr_t, void *);
+
 /**
  * Callback for when a layer is detected via write-then-execute (W2X).
  * Processes the event, prepares an output file and passes it to the dumper thread.
@@ -35,5 +44,17 @@
  * @param cat The type of page that the event triggered on.
  */
 void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
+
+void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
+
+/**
+ * Iterates over a VAD tree
+ *
+ * @param vmi A libVMI instance.
+ * @param node The current node
+ * @param func The function to call on each iteration
+ * @param data User-specified data
+ */
+void vad_iterator(vmi_instance_t vmi, addr_t node, traverse_func func, void *data);
 
 #endif

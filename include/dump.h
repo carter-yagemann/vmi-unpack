@@ -37,14 +37,39 @@ GQueue *dump_queue;
 GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 GSList *seen_hashes;
 
+#define SEG_COUNT_MAX 100
+
+typedef enum
+{
+    VadNone,
+    VadDevicePhysicalMemory,
+    VadImageMap,
+    VadAwe,
+    VadWriteWatch,
+    VadLargePages,
+    VadRotatePhysical,
+    VadLargePageSection,
+} vadtype_t;
+
+typedef struct
+{
+    char *buf;
+    addr_t base_va;
+    size_t size;    // size of buffer, size <= va_size
+    size_t va_size; // size of VMA area
+    vadtype_t vadtype;
+    uint8_t isprivate;
+    uint8_t protection;
+    unicode_string_t filename;
+} vad_seg_t;
+
 typedef struct
 {
     vmi_pid_t pid;
     reg_t rip;
-    reg_t base;
-    char *buff;
-    uint64_t size;
     unsigned char sha256[SHA256_DIGEST_LENGTH];
+    vad_seg_t **segments;
+    unsigned segment_count;
 } dump_layer_t;
 
 /**
@@ -84,5 +109,7 @@ void stop_dump_thread();
  * VMA but the instruction that triggered the dump was somewhere in the middle.
  */
 void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, reg_t base);
+
+void queue_vads_to_dump(dump_layer_t *dump);
 
 #endif

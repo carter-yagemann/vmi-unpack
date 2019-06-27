@@ -43,6 +43,17 @@ typedef struct
     gint64 mmvad_rightchild;
     gint64 mmvad_startingvpn;
     gint64 mmvad_endingvpn;
+    gint64 mmvad_controlarea;
+    gint64 controlarea_fileobject;
+    gint64 fileobject_filename;
+    gint64 mmvad_flags;
+    gint64 mmvad_flags_sizeof;
+    gint64 flags_vadtype_start;
+    gint64 flags_vadtype_end;
+    gint64 flags_isprivate_start;
+    gint64 flags_isprivate_end;
+    gint64 flags_protection_start;
+    gint64 flags_protection_end;
 } windows_rekall_t;
 
 typedef struct
