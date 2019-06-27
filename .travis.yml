@@ -21,6 +21,7 @@ addons:
       - libxen-dev
       - libxenstore3.0
       - libyajl-dev
+      - python3-pip
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
