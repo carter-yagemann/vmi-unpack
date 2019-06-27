@@ -21,7 +21,6 @@ addons:
       - libxen-dev
       - libxenstore3.0
       - libyajl-dev
-      - python3-pip
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
@@ -64,5 +63,3 @@ matrix:
         - cd ${TRAVIS_BUILD_DIR}/agent
         - sudo pip install -Ur requirements.txt
         - python server.py --help
-        - sudo pip3 install -Ur requirements.txt
-        - python3 server.py --help
