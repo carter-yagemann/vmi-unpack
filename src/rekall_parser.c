@@ -58,7 +58,7 @@ gint64 get_int_from_jsonpath(const char *expr, JsonNode *root) {
   } else {
     fprintf(stderr, "ERROR: Rekall Parser - Failed to locate JsonPath %s\n", expr);
   }
-  g_object_unref(result_n);
+  json_node_unref(result_n);
   return val;
 }
 
