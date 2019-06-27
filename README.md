@@ -29,7 +29,7 @@ Host OS:
 
 Virtual Machine OS:
 * Windows
-* Linux
+* Linux (currently unstable)
 
 Paging Modes:
 * IA32E
