@@ -28,7 +28,6 @@ before_install:
   - cd $HOME/libvmi/build && cmake ..
   - cd $HOME/libvmi/build && make
   - cd $HOME/libvmi/build && sudo make install
-  - sudo pip install -U rekall-core rekall
 
 matrix:
   include:
