@@ -47,20 +47,25 @@ JsonParser *parse_json(char *json_file)
     return parser;
 }
 
-gint64 get_int_from_jsonpath(const char *expr, JsonNode *root) {
-  gint64 val = G_MININT64;
-  JsonNode* result_n = json_path_query(expr, root, NULL);
-  JsonArray* result_a = json_node_get_array(result_n);
-  if (json_array_get_length(result_a) == 1) {
-    val = json_array_get_int_element(result_a, 0);
-  } else {
-    fprintf(stderr, "ERROR: Rekall Parser - Failed to locate JsonPath %s\n", expr);
-  }
-  json_node_unref(result_n);
-  return val;
+gint64 get_int_from_jsonpath(const char *expr, JsonNode *root)
+{
+    gint64 val = G_MININT64;
+    JsonNode *result_n = json_path_query(expr, root, NULL);
+    JsonArray *result_a = json_node_get_array(result_n);
+    if (json_array_get_length(result_a) == 1)
+    {
+        val = json_array_get_int_element(result_a, 0);
+    }
+    else
+    {
+        fprintf(stderr, "ERROR: Rekall Parser - Failed to locate JsonPath %s\n", expr);
+    }
+    json_node_unref(result_n);
+    return val;
 }
 
-void set_rekall_val(const char *expr, JsonNode *root, gint64 *dest) {
+void set_rekall_val(const char *expr, JsonNode *root, gint64 *dest)
+{
     gint64 val = G_MININT64;
     val = get_int_from_jsonpath(expr, root);
     if (val == G_MININT64)
@@ -80,7 +85,7 @@ bool parse_rekall_linux(linux_rekall_t *rekall, char *json_file)
         return 0;
     }
 
-    JsonNode* root = json_parser_get_root(parser);
+    JsonNode *root = json_parser_get_root(parser);
 
     set_rekall_val("$['$CONSTANTS']['current_task']", root, &rekall->current_task);
     set_rekall_val("$['$STRUCTS']['task_struct'][1]['comm'][0]", root, &rekall->task_struct_comm);
@@ -108,7 +113,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
         return 0;
     }
 
-    JsonNode* root = json_parser_get_root(parser);
+    JsonNode *root = json_parser_get_root(parser);
 
     set_rekall_val("$['$STRUCTS']['_KPCR'][1]['Prcb'][0]", root, &rekall->kpcr_prcb);
     set_rekall_val("$['$STRUCTS']['_KPRCB'][1]['CurrentThread'][0]", root, &rekall->kprcb_currentthread);

@@ -78,7 +78,7 @@ void free_layer(dump_layer_t *layer)
             {
                 free(layer->segments[i]->buf);
                 if (layer->segments[i]->filename.contents)
-                  free(layer->segments[i]->filename.contents);
+                    free(layer->segments[i]->filename.contents);
                 free(layer->segments[i]);
             }
             free(layer->segments);
@@ -162,7 +162,7 @@ void *dump_worker_loop(void *data)
                     memset(line, 0x0, MAX_LINE_LEN);
                     char *vad_fn = "";
                     if (layer->segments[i]->filename.contents)
-                      vad_fn = (char*)layer->segments[i]->filename.contents;
+                        vad_fn = (char *)layer->segments[i]->filename.contents;
                     snprintf(line, MAX_LINE_LEN - 1, vad_line,
                              layer->segments[i]->base_va,
                              layer->segments[i]->va_size,
