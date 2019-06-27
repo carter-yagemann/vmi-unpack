@@ -8,10 +8,8 @@ addons:
     packages:
       - bison
       - build-essential
-      - cmake
       - doxygen
       - flex
-      - git
       - libbison-dev
       - libcunit1-dev
       - libglib2.0-dev
@@ -23,8 +21,6 @@ addons:
       - libxen-dev
       - libxenstore3.0
       - libyajl-dev
-      - python3
-      - python3-pip
 
 before_install:
   - git clone https://github.com/libvmi/libvmi.git $HOME/libvmi
@@ -32,7 +28,7 @@ before_install:
   - cd $HOME/libvmi/build && cmake ..
   - cd $HOME/libvmi/build && make
   - cd $HOME/libvmi/build && sudo make install
-  - sudo pip3 install rekall-core rekall
+  - sudo pip install -U rekall-core rekall
 
 matrix:
   include:
@@ -66,5 +62,7 @@ matrix:
         - TEST="Agent"
       script:
         - cd ${TRAVIS_BUILD_DIR}/agent
-        - sudo pip3 install -r requirements.txt
+        - sudo pip install -Ur requirements.txt
+        - python server.py --help
+        - sudo pip3 install -Ur requirements.txt
         - python3 server.py --help
