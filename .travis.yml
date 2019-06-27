@@ -23,8 +23,6 @@ addons:
       - libxen-dev
       - libxenstore3.0
       - libyajl-dev
-      - python
-      - python-pip
       - python3
       - python3-pip
 
@@ -34,19 +32,10 @@ before_install:
   - cd $HOME/libvmi/build && cmake ..
   - cd $HOME/libvmi/build && make
   - cd $HOME/libvmi/build && sudo make install
-  - sudo pip install rekall-core rekall
+  - sudo pip3 install rekall-core rekall
 
 matrix:
   include:
-
-    - os: linux
-      env:
-        - TEST="Make"
-      script:
-        - cd $TRAVIS_BUILD_DIR
-        - make
-        - make tools
-        - make debug
 
     - os: linux
       env:
@@ -65,10 +54,17 @@ matrix:
 
     - os: linux
       env:
+        - TEST="Make"
+      script:
+        - cd $TRAVIS_BUILD_DIR
+        - make
+        - make tools
+        - make debug
+
+    - os: linux
+      env:
         - TEST="Agent"
       script:
         - cd ${TRAVIS_BUILD_DIR}/agent
-        - sudo pip install -r requirements.txt
         - sudo pip3 install -r requirements.txt
-        - python2 server.py --help
         - python3 server.py --help
