@@ -115,6 +115,7 @@ addr_t windows_find_eprocess_pgd(vmi_instance_t vmi, addr_t pgd)
 GHashTable *vmi_get_all_pids_windows(vmi_instance_t vmi)
 {
     vmi_pid_t pid;  //current pid
+    addr_t objecttable; //current EPROCESS.ObjectTable
     addr_t init_proc;  //ptr to eprocess of initial system process
     addr_t eprocess;  //ptr to eprocess of current walked process
     addr_t next_eprocess_list;  //ptr to eprocess's next_process ptr
@@ -131,6 +132,19 @@ GHashTable *vmi_get_all_pids_windows(vmi_instance_t vmi)
     GHashTable *all_pids = g_hash_table_new(g_direct_hash, g_direct_equal);
     while (1)
     {
+        // Dead process are not always immediately removed from the process list
+        // due to their parent not closing the child handle.
+        // however, the thread count is set to zero, the EPROCESS.ObjectTable is set
+        // to NULL, and the EPROCESS.ExitTime is filled in.
+        // We check if ObjectTable is NULL and skip it if so.
+        // Ref:
+        //    http://mnin.blogspot.com/2011/03/mis-leading-active-in.html
+        //    The Mis-leading 'Active' in PsActiveProcessHead and ActiveProcessLinks
+        addr_t obj_tbl_off = eprocess + process_vmi_windows_rekall.eprocess_objecttable;
+        if (vmi_read_addr_va(vmi, obj_tbl_off, 0, &objecttable) == VMI_SUCCESS)
+        {
+            if (objecttable == 0) goto skip_pid;
+        }
         addr_t pid_ptr = eprocess + process_vmi_windows_rekall.eprocess_pid;
         if (vmi_read_32_va(vmi, pid_ptr, 0, (uint32_t *) &pid) == VMI_SUCCESS)
         {
@@ -141,6 +155,7 @@ GHashTable *vmi_get_all_pids_windows(vmi_instance_t vmi)
             fprintf(stderr, "vmi_get_all_pids: read of pid failed\n");
         }
 
+skip_pid:
         if (vmi_read_addr_va(vmi, eprocess + tasks_offset, 0, &next_eprocess_list) != VMI_SUCCESS)
         {
             g_hash_table_destroy(all_pids);
