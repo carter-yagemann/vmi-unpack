@@ -123,6 +123,7 @@ bool parse_rekall_windows(windows_rekall_t *rekall, char *json_file)
     set_rekall_val("$['$STRUCTS']['_EPROCESS'][1]['UniqueProcessId'][0]", root, &rekall->eprocess_pid);
     set_rekall_val("$['$STRUCTS']['_EPROCESS'][1]['InheritedFromUniqueProcessId'][0]", root, &rekall->eprocess_parent_pid);
     set_rekall_val("$['$STRUCTS']['_EPROCESS'][1]['ActiveProcessLinks'][0]", root, &rekall->eprocess_tasks);
+    set_rekall_val("$['$STRUCTS']['_EPROCESS'][1]['ObjectTable'][0]", root, &rekall->eprocess_objecttable);
     set_rekall_val("$['$STRUCTS']['_EPROCESS'][1]['VadRoot'][0]", root, &rekall->eprocess_vadroot);
     set_rekall_val("$['$STRUCTS']['_MMVAD'][1]['LeftChild'][0]", root, &rekall->mmvad_leftchild);
     set_rekall_val("$['$STRUCTS']['_MMVAD'][1]['RightChild'][0]", root, &rekall->mmvad_rightchild);
