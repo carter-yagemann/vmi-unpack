@@ -158,7 +158,7 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data)
     dump->segments[dump->segment_count]->base_va = base_va;
     dump->segments[dump->segment_count]->size = size;
     dump->segments[dump->segment_count]->va_size = size;
-    dump->segments[dump->segment_count]->buf = malloc(size);
+    dump->segments[dump->segment_count]->buf = calloc(1, size);
     size_t read_size = 0;
     vmi_read_va(
         vmi,
