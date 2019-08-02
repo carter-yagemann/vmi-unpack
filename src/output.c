@@ -147,6 +147,13 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data)
     if (!start || !end) return;
     base_va = start;
     size = end - start;
+    // this is some weird address padding that results in huge sections of memory
+    // that probably dont contain anything useful.
+    if (end > 0x7ff00000000)
+    {
+        //printf("%s: start:%#016lx end:%#016lx\n", __func__, start, end);
+        return;
+    }
     dump->segments[dump->segment_count] = malloc(sizeof(vad_seg_t));
     dump->segments[dump->segment_count]->base_va = base_va;
     dump->segments[dump->segment_count]->size = size;
