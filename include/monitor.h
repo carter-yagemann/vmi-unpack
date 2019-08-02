@@ -133,9 +133,13 @@ typedef struct
     page_cat_t cat;
 } trapped_page_t;
 
+#ifdef TRACE_TRAPS
 #define trace_trap(addr, trap, mesg) fprintf(stderr, \
         "%s:trace_trap paddr=%p pid=%d cat=%s mesg=%s\n", \
         __FUNCTION__, (gpointer)addr, trap->pid, cat2str(trap->cat), mesg)
+#else
+#define trace_trap(addr, trap, mesg)
+#endif
 
 typedef struct
 {
