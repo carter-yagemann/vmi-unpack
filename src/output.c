@@ -33,7 +33,9 @@
 #include <paging/intel_64.h>
 #include <vmi/process.h>
 
+/* defined in main.c */
 extern char *domain_name;
+extern char *vol_profile;
 extern char *output_dir;
 
 void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
@@ -273,13 +275,13 @@ int capture_cmd(const char *cmd, const char *fn)
 
 void volatility_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
-//  volatility -l vmi://win7-borg vaddump -D ~/borg-out/ -p 2448
-//  volatility -l vmi://win7-borg vadinfo --output=json -p 2448 --output-file=calc_upx.exe.vadinfo.json
+//  volatility -l vmi://win7-borg --profile=Win7SP0x64 vaddump -D ~/borg-out/ -p 2448
+//  volatility -l vmi://win7-borg --profile=Win7SP0x64 vadinfo --output=json -p 2448 --output-file=calc_upx.exe.vadinfo.json
 
   // vmi_pid_t is int32_t which can be int or long
   // so, for pid, we use %ld and cast to long
-  const char *vaddump_cmd = "%svolatility -l vmi://%s vaddump -D %s 2>&1 -p %ld";
-  const char *vadinfo_cmd = "%svolatility -l vmi://%s vadinfo --output=json --output-file=%s 2>&1 -p %ld";
+  const char *vaddump_cmd = "%svolatility -l vmi://%s --profile=%s vaddump -D %s 2>&1 -p %ld";
+  const char *vadinfo_cmd = "%svolatility -l vmi://%s --profile=%s  vadinfo --output=json --output-file=%s 2>&1 -p %ld";
   const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
   char *cmd = NULL;
   char *cmd_prefix = "";
@@ -292,13 +294,13 @@ void volatility_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, p
   filepath = malloc(PATH_MAX);
 
   // vaddump
-  snprintf(cmd, cmd_max-1, vaddump_cmd, cmd_prefix, domain_name, output_dir, (long)pid);
+  snprintf(cmd, cmd_max-1, vaddump_cmd, cmd_prefix, domain_name, vol_profile, output_dir, (long)pid);
   snprintf(filepath, PATH_MAX - 1, "%s/vaddump_output.%04d.%ld", output_dir, dump_count, (long)pid);
   capture_cmd(cmd, filepath);
 
   // vadinfo
   snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
-  snprintf(cmd, cmd_max-1, vadinfo_cmd, cmd_prefix, domain_name, filepath, (long)pid);
+  snprintf(cmd, cmd_max-1, vadinfo_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
   snprintf(filepath, PATH_MAX - 1, "%s/vadinfo_output.%04d.%ld", output_dir, dump_count, (long)pid);
   capture_cmd(cmd, filepath);
 
