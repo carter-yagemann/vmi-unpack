@@ -233,9 +233,7 @@ int capture_cmd(const char *cmd, const char *fn)
   FILE *pipe = NULL;
   FILE *out_f = NULL;
   char *out_buf = NULL;
-  char *out_cur = NULL;
-  size_t out_size = 0;
-  size_t tmp_size = 0;
+  size_t out_size;
   const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
 
   // fork&exec cmd
@@ -247,27 +245,31 @@ int capture_cmd(const char *cmd, const char *fn)
     return -1;
   }
 
-  //capture cmd output
-  out_cur = out_buf = malloc(PAGE_SIZE);
-  while (fgets(out_cur, PAGE_SIZE, pipe) != NULL)
-  {
-    tmp_size = strlen(out_cur);
-    out_size += tmp_size;
-    out_cur = realloc(out_buf, PAGE_SIZE + tmp_size);
-  }
-  pclose(pipe);
-
-  // write output to fn
+  // capture cmd output and write to fn
   out_f = fopen(fn, "w");
   if (!out_f)
   {
     fprintf(stderr, "%s: error: failed to open {%s} for writing\n", __func__, fn);
+    pclose(pipe);
+    return -1;
   }
-  tmp_size = fwrite(out_buf, 1, out_size, out_f);
-  if (tmp_size < out_size)
+  out_buf = malloc(PAGE_SIZE);
+  if (!out_buf)
   {
-    fprintf(stderr, "%s: warning: short write to {%s}\n", __func__, fn);
+    fprintf(stderr, "%s: error: failed to allocate buffer\n", __func__);
+    fclose(out_f);
+    pclose(pipe);
+    return -1;
   }
+
+  while (1) {
+    out_size = fread(out_buf, 1, PAGE_SIZE, pipe);
+    if (!out_size)
+      break;
+    if (fwrite(out_buf, 1, out_size, out_f) != out_size)
+      fprintf(stderr, "%s: warning: short write to {%s}\n", __func__, fn);
+  }
+
   free(out_buf);
   fclose(out_f);
   return 0;
