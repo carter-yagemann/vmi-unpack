@@ -38,6 +38,7 @@ typedef struct
     gint64 eprocess_pid;
     gint64 eprocess_parent_pid;
     gint64 eprocess_tasks;
+    gint64 eprocess_objecttable;
     gint64 eprocess_vadroot;
     gint64 mmvad_leftchild;
     gint64 mmvad_rightchild;

@@ -77,6 +77,7 @@ void test_windows_rekall()
     CU_ASSERT(rekall.eprocess_pid == 384);
     CU_ASSERT(rekall.eprocess_parent_pid == 656);
     CU_ASSERT(rekall.eprocess_vadroot == 1096);
+    CU_ASSERT(rekall.eprocess_objecttable == 512);
     CU_ASSERT(rekall.mmvad_leftchild == 8);
     CU_ASSERT(rekall.mmvad_rightchild == 16);
     CU_ASSERT(rekall.mmvad_startingvpn == 24);
