@@ -154,6 +154,12 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    // santity checks for volatility
+    if (system("which volatility")) {
+        fprintf(stderr, "ERROR: Unpack - volatility not found in path.\n");
+        return EXIT_FAILURE;
+    }
+
     // setup signal mask for worker threads, who will not be handling any signals
     sigemptyset(&my_sigs);
     sigaddset(&my_sigs, SIGTERM);
