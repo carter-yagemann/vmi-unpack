@@ -155,7 +155,8 @@ int main(int argc, char *argv[])
     }
 
     // santity checks for volatility
-    if (system("which volatility")) {
+    if (system("which volatility"))
+    {
         fprintf(stderr, "ERROR: Unpack - volatility not found in path.\n");
         return EXIT_FAILURE;
     }
