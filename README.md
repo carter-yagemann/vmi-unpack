@@ -36,11 +36,15 @@ Paging Modes:
 
 ## Installation
 
-VMI-Unpack depends on [libVMI](https://github.com/libvmi/libvmi) and
-[rekall](https://github.com/google/rekall), so these must be installed and
-configured first along with a compatible hypervisor. You will also have to make
+VMI-Unpack depends on [libVMI](https://github.com/libvmi/libvmi),
+[rekall](https://github.com/google/rekall) and
+[volatility](https://github.com/volatilityfoundation/volatility),
+so these must be installed and
+configured first along with a compatible hypervisor. You must also install
+the libVMI [Python](https://github.com/libvmi/python) bindings and add the
+address space module to volatility. You will also have to make
 a libVMI configuration and rekall JSON profile for the virtual machine you wish
-to perform unpacking on. Refer to both projects for more details.
+to perform unpacking on. Refer to respective projects for more details.
 
 VMI-Unpack additionally depends on the glib-2.0, json-glib-1.0, openssl, and the standard
 build utilities. The following is an example of how to install these
@@ -55,6 +59,34 @@ For running unit tests, CUnit is also required:
 Once all the dependencies are installed, simply download or clone this
 repository and run `make`.
 
+The following subsections provide example steps for installing libVMI, libVMI Python
+and Volatility with libVMI plugin for Debian-like systems.
+
+### [libVMI](https://github.com/libvmi/libvmi)
+
+```
+sudo apt install cmake flex bison libglib2.0-dev libvirt-dev libjson-c-dev libyajl-dev
+git clone https://github.com/libvmi/libvmi.git
+cd libvmi
+mkdir build
+cd build
+cmake ..
+make
+sudo make install
+sudo ldconfig
+```
+
+### [libVMI Python](https://github.com/libvmi/python) + [Volatility](https://github.com/volatilityfoundation/volatility)
+
+```
+sudo apt install volatility
+git clone https://github.com/libvmi/python.git libvmi-python
+cd libvmi-python
+python setup.py build
+sudo python setup.py install
+sudo cp volatility/vmi.py /usr/lib/python2.7/dist-packages/volatility/plugins/addrspaces/vmi.py
+```
+
 ## Usage
 
 ```
@@ -63,6 +95,7 @@ repository and run `make`.
 Required arguments:
     -d <domain_name>         Name of VM to unpack from.
     -r <rekall_file>         Path to rekall file.
+    -v <vol_profile>         Volatility profile to use.
     -o <output_dir>          Directory to dump layers into.
 
 One of the following must be provided:
@@ -77,10 +110,11 @@ Optional arguments:
 ## Output
 
 Every time the target process writes data to a page and then executes it, a full memory
-dump will be taken for that process' userspace. When the dump includes more than one
-continuous chunk of memory, a `.map` file will also be written with meta-data like the
-file offset of each memory chunk, the virtual address each chunk came from, the value in
-the program counter, etc.
+dump will be taken for that process' user space. This is done by invoking volatility's
+`vaddump` and `vadinfo` modules on the process. Currently, the result is a series of `*.dmp`
+files containing the raw data from each memory area, a JSON file describing these VADs
+and two log files containing volatility's `stdout` and `stderr` (one for `vaddump`, one for `vadinfo`).
+This is subject to change in the future as development continues.
 
 ## Instrumentation
 
@@ -120,8 +154,8 @@ The host is now ready.
 ### Preparing the Guest
 
 To prepare the guest, simply install python (tested with version 2.x), copy over
-the script `agent/agent.py`, and configure the guest to run it at startup. For
-example, on Windows you can place `agent.py` in the user's startup directory.
+the script `agent/agent.py`, and configure the guest to run it at start-up. For
+example, on Windows you can place `agent.py` in the user's start-up directory.
 
 Upon running, the client agent will try to connect to the default gateway to
 retrieve samples. Therefore, this is the interface the server agent should be

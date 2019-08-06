@@ -35,6 +35,7 @@
 /* Global variables */
 char *domain_name = NULL;
 char *process_name = NULL;
+char *vol_profile = NULL;
 char *output_dir = NULL;
 char *rekall = NULL;
 vmi_pid_t process_pid = 0;
@@ -57,6 +58,7 @@ void usage(char *name)
     printf("Required arguments:\n");
     printf("    -d <domain_name>         Name of VM to unpack from.\n");
     printf("    -r <rekall_file>         Path to rekall file.\n");
+    printf("    -v <vol_profile>         Volatility profile to use.\n");
     printf("    -o <output_dir>          Directory to dump layers into.\n");
     printf("\n");
     printf("One of the following must be provided:\n");
@@ -76,7 +78,8 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
     {
         fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
-        monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
+        // monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
+        monitor_add_page_table(vmi, pid, volatility_vaddump, tracking_flags, 0);
         monitor_remove_cr3(monitor_pid);
     }
 
@@ -93,7 +96,8 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
         process_pid = pid;
         fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
-        monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
+        // monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
+        monitor_add_page_table(vmi, pid, volatility_vaddump, tracking_flags, 0);
         monitor_remove_cr3(monitor_name);
     }
     free(name);
@@ -109,7 +113,7 @@ int main(int argc, char *argv[])
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:o:p:n:fl")) != -1)
+    while ((c = getopt(argc, argv, "d:r:v:o:p:n:fl")) != -1)
     {
         switch (c)
         {
@@ -118,6 +122,9 @@ int main(int argc, char *argv[])
                 break;
             case 'r':
                 rekall = optarg;
+                break;
+            case 'v':
+                vol_profile = optarg;
                 break;
             case 'o':
                 output_dir = optarg;
@@ -140,10 +147,17 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (domain_name == NULL || rekall == NULL || output_dir == NULL ||
+    if (!domain_name || !rekall || !vol_profile || !output_dir ||
         (process_pid == 0 && process_name == NULL))
     {
         usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    // santity checks for volatility
+    if (system("which volatility"))
+    {
+        fprintf(stderr, "ERROR: Unpack - volatility not found in path.\n");
         return EXIT_FAILURE;
     }
 

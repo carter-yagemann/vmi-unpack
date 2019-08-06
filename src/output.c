@@ -22,6 +22,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h> //PATH_MAX
+#include <unistd.h> //sysconf(_SC_PAGESIZE)
 
 #include <libvmi/libvmi.h>
 
@@ -30,6 +32,11 @@
 #include <output.h>
 #include <paging/intel_64.h>
 #include <vmi/process.h>
+
+/* defined in main.c */
+extern char *domain_name;
+extern char *vol_profile;
+extern char *output_dir;
 
 void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
@@ -147,11 +154,18 @@ void handle_node(vmi_instance_t vmi, addr_t node, void *data)
     if (!start || !end) return;
     base_va = start;
     size = end - start;
+    // this is some weird address padding that results in huge sections of memory
+    // that probably dont contain anything useful.
+    if (end > 0x7ff00000000)
+    {
+        //printf("%s: start:%#016lx end:%#016lx\n", __func__, start, end);
+        return;
+    }
     dump->segments[dump->segment_count] = malloc(sizeof(vad_seg_t));
     dump->segments[dump->segment_count]->base_va = base_va;
     dump->segments[dump->segment_count]->size = size;
     dump->segments[dump->segment_count]->va_size = size;
-    dump->segments[dump->segment_count]->buf = malloc(size);
+    dump->segments[dump->segment_count]->buf = calloc(1, size);
     size_t read_size = 0;
     vmi_read_va(
         vmi,
@@ -212,4 +226,88 @@ void vad_iterator(vmi_instance_t vmi, addr_t node, traverse_func func, void *dat
         fprintf(stderr, "vad_iterator: Right node could not be read\n");
     if (right)
         vad_iterator(vmi, right, func, data);
+}
+
+int capture_cmd(const char *cmd, const char *fn)
+{
+    FILE *pipe = NULL;
+    FILE *out_f = NULL;
+    char *out_buf = NULL;
+    size_t out_size;
+    const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
+
+    // fork&exec cmd
+    // NOTE: popen does not capture stderr. cmd should have "2>&1" if you want stderr
+    pipe = popen(cmd, "r");
+    if (pipe == NULL)
+    {
+        fprintf(stderr, "%s: failed to run cmd {%s}\n", __func__, cmd);
+        return -1;
+    }
+
+    // capture cmd output and write to fn
+    out_f = fopen(fn, "w");
+    if (!out_f)
+    {
+        fprintf(stderr, "%s: error: failed to open {%s} for writing\n", __func__, fn);
+        pclose(pipe);
+        return -1;
+    }
+    out_buf = malloc(PAGE_SIZE);
+    if (!out_buf)
+    {
+        fprintf(stderr, "%s: error: failed to allocate buffer\n", __func__);
+        fclose(out_f);
+        pclose(pipe);
+        return -1;
+    }
+
+    while (1)
+    {
+        out_size = fread(out_buf, 1, PAGE_SIZE, pipe);
+        if (!out_size)
+            break;
+        if (fwrite(out_buf, 1, out_size, out_f) != out_size)
+            fprintf(stderr, "%s: warning: short write to {%s}\n", __func__, fn);
+    }
+
+    free(out_buf);
+    fclose(out_f);
+    return 0;
+}
+
+void volatility_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
+{
+    //  volatility -l vmi://win7-borg --profile=Win7SP0x64 vaddump -D ~/borg-out/ -p 2448
+    //  volatility -l vmi://win7-borg --profile=Win7SP0x64 vadinfo --output=json -p 2448 --output-file=calc_upx.exe.vadinfo.json
+
+    // vmi_pid_t is int32_t which can be int or long
+    // so, for pid, we use %ld and cast to long
+    const char *vaddump_cmd = "%svolatility -l vmi://%s --profile=%s vaddump -D %s 2>&1 -p %ld";
+    const char *vadinfo_cmd = "%svolatility -l vmi://%s --profile=%s  vadinfo --output=json --output-file=%s 2>&1 -p %ld";
+    const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
+    char *cmd = NULL;
+    char *cmd_prefix = "";
+    const size_t cmd_max = PAGE_SIZE;
+    char *filepath = NULL;
+
+    static int dump_count = 0;
+
+    cmd = malloc(cmd_max);
+    filepath = malloc(PATH_MAX);
+
+    // vaddump
+    snprintf(cmd, cmd_max - 1, vaddump_cmd, cmd_prefix, domain_name, vol_profile, output_dir, (long)pid);
+    snprintf(filepath, PATH_MAX - 1, "%s/vaddump_output.%04d.%ld", output_dir, dump_count, (long)pid);
+    capture_cmd(cmd, filepath);
+
+    // vadinfo
+    snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
+    snprintf(cmd, cmd_max - 1, vadinfo_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
+    snprintf(filepath, PATH_MAX - 1, "%s/vadinfo_output.%04d.%ld", output_dir, dump_count, (long)pid);
+    capture_cmd(cmd, filepath);
+
+    dump_count++;
+    free(cmd);
+    free(filepath);
 }
