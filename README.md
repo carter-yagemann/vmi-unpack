@@ -19,7 +19,7 @@ VMI-Unpack is also MIT licensed so everyone can use and modify it.
 
 ## Support
 
-VMI-Unpack current works under the following conditions:
+VMI-Unpack currently works under the following conditions:
 
 Hypervisors:
 * Xen
