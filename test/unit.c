@@ -78,6 +78,7 @@ void test_windows_rekall()
     CU_ASSERT(rekall.eprocess_parent_pid == 656);
     CU_ASSERT(rekall.eprocess_vadroot == 1096);
     CU_ASSERT(rekall.eprocess_objecttable == 512);
+    CU_ASSERT(rekall.eprocess_peb == 824);
     CU_ASSERT(rekall.mmvad_leftchild == 8);
     CU_ASSERT(rekall.mmvad_rightchild == 16);
     CU_ASSERT(rekall.mmvad_startingvpn == 24);
@@ -93,6 +94,7 @@ void test_windows_rekall()
     CU_ASSERT(rekall.flags_isprivate_end == 64);
     CU_ASSERT(rekall.flags_protection_start == 56);
     CU_ASSERT(rekall.flags_protection_end == 61);
+    CU_ASSERT(rekall.peb_imagebaseaddress == 16);
 }
 
 /* DUMP */
