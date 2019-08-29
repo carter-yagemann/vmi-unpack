@@ -79,7 +79,7 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
         fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
         // monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
-        monitor_add_page_table(vmi, pid, volatility_vaddump, tracking_flags, 0);
+        monitor_add_page_table(vmi, pid, volatility_callback_vaddump, tracking_flags, 0);
         monitor_remove_cr3(monitor_pid);
     }
 
@@ -97,7 +97,7 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
         fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
         // monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
-        monitor_add_page_table(vmi, pid, volatility_vaddump, tracking_flags, 0);
+        monitor_add_page_table(vmi, pid, volatility_callback_vaddump, tracking_flags, 0);
         monitor_remove_cr3(monitor_name);
     }
     free(name);

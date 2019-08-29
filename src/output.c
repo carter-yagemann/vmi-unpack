@@ -38,6 +38,8 @@ extern char *domain_name;
 extern char *vol_profile;
 extern char *output_dir;
 
+int dump_count = 0;
+
 void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
     size_t dump_size;
@@ -276,22 +278,27 @@ int capture_cmd(const char *cmd, const char *fn)
     return 0;
 }
 
-void volatility_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
+void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
+{
+    char *cmd_prefix = "";
+
+    volatility_vaddump(pid, cmd_prefix, dump_count);
+    volatility_vadinfo(pid, cmd_prefix, dump_count);
+
+    dump_count++;
+}
+
+int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
 {
     //  volatility -l vmi://win7-borg --profile=Win7SP0x64 vaddump -D ~/borg-out/ -p 2448
-    //  volatility -l vmi://win7-borg --profile=Win7SP0x64 vadinfo --output=json -p 2448 --output-file=calc_upx.exe.vadinfo.json
 
     // vmi_pid_t is int32_t which can be int or long
     // so, for pid, we use %ld and cast to long
     const char *vaddump_cmd = "%svolatility -l vmi://%s --profile=%s vaddump -D %s 2>&1 -p %ld";
-    const char *vadinfo_cmd = "%svolatility -l vmi://%s --profile=%s  vadinfo --output=json --output-file=%s 2>&1 -p %ld";
     const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
     char *cmd = NULL;
-    char *cmd_prefix = "";
     const size_t cmd_max = PAGE_SIZE;
     char *filepath = NULL;
-
-    static int dump_count = 0;
 
     cmd = malloc(cmd_max);
     filepath = malloc(PATH_MAX);
@@ -301,13 +308,35 @@ void volatility_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, p
     snprintf(filepath, PATH_MAX - 1, "%s/vaddump_output.%04d.%ld", output_dir, dump_count, (long)pid);
     capture_cmd(cmd, filepath);
 
+    free(cmd);
+    free(filepath);
+
+    return 0;
+}
+
+int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
+{
+    //  volatility -l vmi://win7-borg --profile=Win7SP0x64 vadinfo --output=json -p 2448 --output-file=calc_upx.exe.vadinfo.json
+
+    // vmi_pid_t is int32_t which can be int or long
+    // so, for pid, we use %ld and cast to long
+    const char *vadinfo_cmd = "%svolatility -l vmi://%s --profile=%s  vadinfo --output=json --output-file=%s 2>&1 -p %ld";
+    const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
+    char *cmd = NULL;
+    const size_t cmd_max = PAGE_SIZE;
+    char *filepath = NULL;
+
+    cmd = malloc(cmd_max);
+    filepath = malloc(PATH_MAX);
+
     // vadinfo
     snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
     snprintf(cmd, cmd_max - 1, vadinfo_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
     snprintf(filepath, PATH_MAX - 1, "%s/vadinfo_output.%04d.%ld", output_dir, dump_count, (long)pid);
     capture_cmd(cmd, filepath);
 
-    dump_count++;
     free(cmd);
     free(filepath);
+
+    return 0;
 }

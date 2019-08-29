@@ -25,6 +25,8 @@
 
 #include <libvmi/libvmi.h>
 
+extern int dump_count;
+
 typedef struct
 {
     char *buf;
@@ -45,7 +47,9 @@ typedef void (*traverse_func)(vmi_instance_t, addr_t, void *);
  */
 void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
 void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
-void volatility_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
+void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
+int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
+int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
 
 /**
  * Iterates over a VAD tree
