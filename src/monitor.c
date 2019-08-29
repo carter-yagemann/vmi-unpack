@@ -29,6 +29,7 @@
 #include <libvmi/events.h>
 
 #include <monitor.h>
+#include <output.h>
 #include <paging/intel_64.h>
 #include <vmi/process.h>
 
@@ -847,6 +848,8 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     fprintf(stderr, "%s: pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
 
     //monitor_trap_table(vmi, pid_event);
+    volatility_vadinfo(pid, "", dump_count);
+    dump_count++;
 }
 
 void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
