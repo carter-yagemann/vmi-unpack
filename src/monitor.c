@@ -672,6 +672,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
         mem_seg_t vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
         if (!vma.size)
         {
+            goto after_not_found;
             char mesg[] = "%s:VMA not found"
                           ":pid=%d:curr_pid=%d"
                           ":pid_cr3=0x%lx:event_cr3=0x%lx"
@@ -690,6 +691,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
                     pid_pa, evt_pa,
                     event->mem_event.gla, paddr
                    );
+after_not_found:
 
             // write traps are only set by monitor_set_trap() and exec by monitor_trap_vma()
             if (event->mem_event.out_access & VMI_MEMACCESS_W)
