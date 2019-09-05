@@ -358,7 +358,7 @@ out:
     return rc;
 }
 
-#define DEBUG_ADD_RIP_TO_JSON 1
+//#define DEBUG_ADD_RIP_TO_JSON 1
 
 int add_rip_to_json(vmi_pid_t pid, int dump_count, reg_t rip)
 {
