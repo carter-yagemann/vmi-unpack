@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <limits.h> //PATH_MAX
 #include <unistd.h> //sysconf(_SC_PAGESIZE)
+#include <sys/stat.h> //mkdir()
 
 #include <libvmi/libvmi.h>
 #include <json-glib/json-glib.h>
@@ -451,7 +452,9 @@ int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     filepath = malloc(PATH_MAX);
 
     // vaddump
-    snprintf(cmd, cmd_max - 1, vaddump_cmd, cmd_prefix, domain_name, vol_profile, output_dir, (long)pid);
+    snprintf(filepath, PATH_MAX - 1, "%s/%04d", output_dir, dump_count);
+    mkdir(filepath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH); // mode = 775
+    snprintf(cmd, cmd_max - 1, vaddump_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
     snprintf(filepath, PATH_MAX - 1, "%s/vaddump_output.%04d.%ld", output_dir, dump_count, (long)pid);
     queue_and_wait_for_shell_cmd(cmd, filepath);
 
