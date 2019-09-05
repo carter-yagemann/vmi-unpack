@@ -33,6 +33,7 @@
 #include <libvmi/libvmi.h>
 
 #include <dump.h>
+int capture_cmd(const char *cmd, const char *fn);
 
 #define LAYER_FILENAME_LEN 128
 #define LAYER_FILENAME_PREFIX_LEN 4
@@ -301,4 +302,74 @@ void queue_vads_to_dump(dump_layer_t *layer)
     OPENSSL_cleanse(&c, sizeof(c));
     g_queue_push_tail(dump_queue, layer);
     sem_post(&dump_sem);
+}
+
+void *shell_worker_loop(void *data)
+{
+    shell_cmd_t *cmd;
+    while (1)
+    {
+        sem_wait(&shell_sem);
+        cmd = (shell_cmd_t *) g_queue_pop_head(shell_queue);
+        if (!cmd)
+        {
+            break; // signal to stop
+        }
+        capture_cmd(cmd->cmd, cmd->out_fn);
+        //TODO: this really should be a condition variable
+        sem_post(&shell_sem);
+    }
+    return NULL;
+}
+
+void start_shell_thread(void)
+{
+    // Create semaphore, queue, and hashtable
+    if (sem_init(&shell_sem, 0, 0))
+    {
+        fprintf(stderr, "ERROR: %s - Failed to initialize semaphore\n", __func__);
+        return;
+    }
+    shell_queue = g_queue_new();
+
+    // Start worker thread
+    pthread_create(&shell_worker, NULL, shell_worker_loop, NULL);
+}
+
+void stop_shell_thread()
+{
+    struct timespec t;
+    // Signals shell worker to quit
+    g_queue_push_tail(shell_queue, NULL);
+    sem_post(&shell_sem);
+
+    clock_gettime(CLOCK_REALTIME, &t);
+    t.tv_sec += 2;
+    if (pthread_timedjoin_np(shell_worker, NULL, &t) != 0)
+    {
+        pthread_cancel(shell_worker);
+        t.tv_sec += 2;
+        pthread_timedjoin_np(shell_worker, NULL, &t);
+    }
+
+    sem_destroy(&shell_sem);
+    g_queue_free(shell_queue);
+}
+
+void queue_and_wait_for_shell_cmd(char *cmd_str, char *out_fn)
+{
+    shell_cmd_t *cmd;
+
+    if (!cmd_str)
+        return;  // Don't shell empty command!
+
+    cmd = (shell_cmd_t *) malloc(sizeof(shell_cmd_t));
+    cmd->cmd = cmd_str;
+    cmd->out_fn = out_fn;
+
+    g_queue_push_tail(shell_queue, cmd);
+
+    sem_post(&shell_sem);
+    //TODO: this really should be a condition variable
+    sem_wait(&shell_sem);
 }

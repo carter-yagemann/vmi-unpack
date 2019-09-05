@@ -37,6 +37,10 @@ GQueue *dump_queue;
 GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 GSList *seen_hashes;
 
+pthread_t shell_worker;
+sem_t shell_sem;
+GQueue *shell_queue;
+
 #define SEG_COUNT_MAX 100
 
 typedef enum
@@ -71,6 +75,12 @@ typedef struct
     vad_seg_t **segments;
     unsigned segment_count;
 } dump_layer_t;
+
+typedef struct
+{
+    char *cmd;
+    char *out_fn;
+} shell_cmd_t;
 
 /**
  * Compares two SHA256 hashes.
