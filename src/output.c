@@ -275,6 +275,7 @@ int capture_cmd(const char *cmd, const char *fn)
 
     free(out_buf);
     fclose(out_f);
+    pclose(pipe);
     return 0;
 }
 
