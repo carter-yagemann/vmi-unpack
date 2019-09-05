@@ -361,7 +361,8 @@ out:
 
 int add_rip_to_json(vmi_pid_t pid, int dump_count, reg_t rip)
 {
-    char *rip_addr = "0x1122334455667788P"; // pad one extra byte at the end as "P" just in case
+    char rip_buf[32] = {0};
+    // "0x1122334455667788"
     char *filepath = NULL;
     JsonParser *parser = NULL;
     JsonNode *root = NULL;
@@ -384,8 +385,8 @@ int add_rip_to_json(vmi_pid_t pid, int dump_count, reg_t rip)
     }
 
     root = json_parser_get_root(parser);
-    snprintf(rip_addr, strlen(rip_addr), "%p", (void*)rip);
-    json_object_set_string_member(json_node_get_object(root), "rip", rip_addr);
+    snprintf(rip_buf, sizeof(rip_buf), "%p", (void*)rip);
+    json_object_set_string_member(json_node_get_object(root), "rip", rip_buf);
 
     data = json_node_to_data(root, &len);
     g_object_unref(parser);
@@ -407,10 +408,10 @@ int add_rip_to_json(vmi_pid_t pid, int dump_count, reg_t rip)
         goto out;
     }
     str_val = (gchar*)json_object_get_string_member(obj, "rip");
-    if (!str_val || strcmp(str_val, rip_addr) != 0)
+    if (!str_val || strcmp(str_val, rip_buf) != 0)
     {
         fprintf(stderr, "%s: error: new vadinfo json file: expected '%s', got '%s'\n",
-            __func__, rip_addr, str_val);
+            __func__, rip_buf, str_val);
         rc = -3;
         g_object_unref(parser);
         goto out;
