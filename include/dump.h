@@ -99,11 +99,13 @@ gint compare_hashes(gconstpointer a, gconstpointer b);
  * @param dir The director layers should be dumped into.
  */
 void start_dump_thread(char *dir);
+void start_shell_thread();
 
 /**
  * Stops the worker thread and processes any remaining items in the queue.
  */
 void stop_dump_thread();
+void stop_shell_thread();
 
 /**
  * Addes a new layer to the queue to be dumped into the output directory.
@@ -119,6 +121,15 @@ void stop_dump_thread();
  * VMA but the instruction that triggered the dump was somewhere in the middle.
  */
 void add_to_dump_queue(char *buffer, uint64_t size, vmi_pid_t pid, reg_t rip, reg_t base);
+
+/*
+ * Add a new command to queue for shell thread to execute.
+ *
+ * @param cmd_str A string to be executed by the shell.
+ * @param out_fn The filepath to write any captured output. Set to NULL to skip
+ * saving any output.
+ */
+void queue_and_wait_for_shell_cmd(char *cmd_str, char *out_fn);
 
 void queue_vads_to_dump(dump_layer_t *dump);
 

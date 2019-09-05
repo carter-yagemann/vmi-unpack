@@ -452,7 +452,7 @@ int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     // vaddump
     snprintf(cmd, cmd_max - 1, vaddump_cmd, cmd_prefix, domain_name, vol_profile, output_dir, (long)pid);
     snprintf(filepath, PATH_MAX - 1, "%s/vaddump_output.%04d.%ld", output_dir, dump_count, (long)pid);
-    capture_cmd(cmd, filepath);
+    queue_and_wait_for_shell_cmd(cmd, filepath);
 
     free(cmd);
     free(filepath);
@@ -479,7 +479,7 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
     snprintf(cmd, cmd_max - 1, vadinfo_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
     snprintf(filepath, PATH_MAX - 1, "%s/vadinfo_output.%04d.%ld", output_dir, dump_count, (long)pid);
-    capture_cmd(cmd, filepath);
+    queue_and_wait_for_shell_cmd(cmd, filepath);
 
     free(cmd);
     free(filepath);

@@ -173,6 +173,7 @@ int main(int argc, char *argv[])
 
     // start all child threads below
     start_dump_thread(output_dir);
+    start_shell_thread();
     // end child thread creation
 
     // Register signal handler. only main thread will handle them.
@@ -223,6 +224,7 @@ int main(int argc, char *argv[])
         monitor_destroy(vmi);
         vmi_destroy(vmi);
         stop_dump_thread();
+        stop_shell_thread();
         return EXIT_FAILURE;
     }
 
@@ -250,6 +252,7 @@ int main(int argc, char *argv[])
     // Cleanup
     stop_dump_thread();
     fprintf(stderr, "dump thread stopped\n");
+    stop_shell_thread();
     monitor_destroy(vmi);
     process_vmi_destroy(vmi);
 
