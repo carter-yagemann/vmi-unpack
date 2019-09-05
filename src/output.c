@@ -26,6 +26,7 @@
 #include <unistd.h> //sysconf(_SC_PAGESIZE)
 
 #include <libvmi/libvmi.h>
+#include <json-glib/json-glib.h>
 
 #include <monitor.h>
 #include <dump.h>
@@ -287,12 +288,148 @@ int capture_cmd(const char *cmd, const char *fn)
     return 0;
 }
 
+static inline JsonParser* read_json_file(const char* fn)
+{
+    JsonParser *parser = NULL;
+    GError *error = NULL;
+
+    parser = json_parser_new();
+    if (!json_parser_load_from_file(parser, fn, &error))
+    {
+        fprintf(stderr, "%s: error: cannot parse vadinfo json file {%s} %s\n",
+            __func__, fn, error->message);
+        g_error_free(error);
+        g_object_unref(parser);
+        return NULL;
+    }
+    return parser;
+}
+
+static inline gchar* json_node_to_data(JsonNode *node, gsize *len)
+{
+    gchar *data = NULL;
+    JsonGenerator *gen = json_generator_new();
+    json_generator_set_root(gen, node);
+    data = json_generator_to_data(gen, len);
+    g_object_unref(gen);
+    return data;
+}
+
+/*
+ * return -1 if fopen() fails
+ * return -2 if fwrite fails and ferror() is true
+ * return the negative of (written + 10) to indicate a short write
+ *   the value returned is padded by 10 to allow for other error codes to be returned
+ * return written if fwrite() succeeds and written == len
+ */
+static inline int write_file(const char *fn, const char *data, const size_t len)
+{
+    size_t written;
+    int rc = -9;
+    FILE *out_f = fopen(fn, "w");
+
+    if (!out_f)
+    {
+      perror(__func__);
+      rc = -1;
+      goto out;
+    }
+
+    written = fwrite(data, 1, len, out_f);
+    if (written != len)
+    {
+        if (!ferror(out_f))
+        {
+            fprintf(stderr, "%s: warning: short write to {%s}\n", __func__, fn);
+            rc = -(written + 10);
+            goto _close;
+        }
+        fprintf(stderr, "%s: %s\n", __func__, strerror(errno));
+        clearerr(out_f);
+        rc = -2;
+        goto _close;
+    }
+    rc = written;
+
+_close:
+    fclose(out_f);
+out:
+    return rc;
+}
+
+#define DEBUG_ADD_RIP_TO_JSON 1
+
+int add_rip_to_json(vmi_pid_t pid, int dump_count, reg_t rip)
+{
+    char *rip_addr = "0x1122334455667788P"; // pad one extra byte at the end as "P" just in case
+    char *filepath = NULL;
+    JsonParser *parser = NULL;
+    JsonNode *root = NULL;
+    gchar *data = NULL;
+    gsize len;
+    int rc = 0;
+#ifdef DEBUG_ADD_RIP_TO_JSON
+    gchar *str_val = NULL;
+    JsonObject *obj = NULL;
+#endif
+
+    filepath = malloc(PATH_MAX);
+    snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
+ 
+    parser = read_json_file(filepath);
+    if (!parser)
+    {
+        rc = -1;
+        goto out;
+    }
+
+    root = json_parser_get_root(parser);
+    snprintf(rip_addr, strlen(rip_addr), "%p", (void*)rip);
+    json_object_set_string_member(json_node_get_object(root), "rip", rip_addr);
+
+    data = json_node_to_data(root, &len);
+    g_object_unref(parser);
+
+    rc = write_file(filepath, data, len);
+    if (rc < 0)
+        goto out;
+
+#ifdef DEBUG_ADD_RIP_TO_JSON
+    // read the new json and test to see if we set the RIP key/val correctly
+    parser = read_json_file(filepath);
+    root = json_parser_get_root(parser);
+    obj = json_node_get_object(root);
+    if (!json_object_has_member(obj, "rip"))
+    {
+        fprintf(stderr, "%s: error: new vadinfo json file does not have member 'rip'\n", __func__);
+        rc = -2;
+        g_object_unref(parser);
+        goto out;
+    }
+    str_val = (gchar*)json_object_get_string_member(obj, "rip");
+    if (!str_val || strcmp(str_val, rip_addr) != 0)
+    {
+        fprintf(stderr, "%s: error: new vadinfo json file: expected '%s', got '%s'\n",
+            __func__, rip_addr, str_val);
+        rc = -3;
+        g_object_unref(parser);
+        goto out;
+    }
+#endif
+
+out:
+    free(filepath);
+    if (data) g_free(data);
+    return rc;
+}
+
 void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
     char *cmd_prefix = "";
 
     volatility_vaddump(pid, cmd_prefix, dump_count);
     volatility_vadinfo(pid, cmd_prefix, dump_count);
+    add_rip_to_json(pid, dump_count, event->x86_regs->rip);
 
     dump_count++;
 }
