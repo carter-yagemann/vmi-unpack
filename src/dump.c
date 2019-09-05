@@ -35,6 +35,14 @@
 #include <dump.h>
 int capture_cmd(const char *cmd, const char *fn);
 
+/*
+ * dump globals
+ */
+sem_t shell_sem;
+pthread_cond_t shell_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t shell_mtx = PTHREAD_MUTEX_INITIALIZER;
+
+
 #define LAYER_FILENAME_LEN 128
 #define LAYER_FILENAME_PREFIX_LEN 4
 
@@ -315,10 +323,13 @@ void *shell_worker_loop(void *data)
         {
             break; // signal to stop
         }
-        capture_cmd(cmd->cmd, cmd->out_fn);
-        //TODO: this really should be a condition variable
-        sem_post(&shell_sem);
+        if ( strcmp("", cmd->cmd) != 0 )
+        {
+            capture_cmd(cmd->cmd, cmd->out_fn);
+        }
+        pthread_cond_signal(&shell_cond);
     }
+    fprintf(stderr, "%s:stopping shell worker loop\n", __func__);
     return NULL;
 }
 
@@ -370,6 +381,7 @@ void queue_and_wait_for_shell_cmd(char *cmd_str, char *out_fn)
     g_queue_push_tail(shell_queue, cmd);
 
     sem_post(&shell_sem);
-    //TODO: this really should be a condition variable
-    sem_wait(&shell_sem);
+    pthread_mutex_lock(&shell_mtx);
+    pthread_cond_wait(&shell_cond, &shell_mtx);
+    pthread_mutex_unlock(&shell_mtx);
 }

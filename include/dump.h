@@ -38,8 +38,10 @@ GHashTable *pid_layer; // key: vmi_pid_t, value: uint64_t current layer
 GSList *seen_hashes;
 
 pthread_t shell_worker;
-sem_t shell_sem;
+extern sem_t shell_sem;
 GQueue *shell_queue;
+extern pthread_cond_t shell_cond;
+extern pthread_mutex_t shell_mtx;
 
 #define SEG_COUNT_MAX 100
 
