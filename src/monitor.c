@@ -859,6 +859,11 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     //the table trap is delayed until the pid is first seen in monitor_handler_cr3()
     //monitor_trap_table(vmi, pid_event);
     volatility_vadinfo(pid, "", dump_count);
+    if (find_process_in_vads(vmi, pid_event, dump_count)) {
+      vadinfo_bundle_t *bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
+      fprintf(stderr, "%s: pid=%d pe_index=%d\n", __FUNCTION__, pid, bundle->pe_index);
+      show_parsed_imports(bundle->parsed_pe);
+    }
     dump_count++;
 }
 
