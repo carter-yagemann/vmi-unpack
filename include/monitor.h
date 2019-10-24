@@ -120,6 +120,7 @@ typedef struct
 typedef struct
 {
     vmi_pid_t pid;
+    char *process_name;
     reg_t cr3;
     uint8_t flags;
     page_table_monitor_cb_t cb;
@@ -188,6 +189,7 @@ void monitor_destroy(vmi_instance_t vmi);
  *                                addresses above 0x70000000. These pages are ignored by default because
  *                                they typically belong to libraries, heap and stack, which is not
  *                                relevant to capturing most packers.
+ *
  * @param cr3 if not NULL, use this for new PIDs cr3
  */
 void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags, reg_t cr3);

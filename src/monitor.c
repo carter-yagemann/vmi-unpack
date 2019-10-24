@@ -231,10 +231,12 @@ void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem
 void destroy_trapped_page(gpointer val) { g_slice_free(trapped_page_t, val); }
 
 //called by g_hash_table_destroy() when g_hash_table_new_full() is used
-void destroy_watched_pid(gpointer val)
+void destroy_watched_pid(gpointer data)
 {
-    g_hash_table_destroy(((pid_events_t *)val)->write_exec_map);
-    g_hash_table_destroy(((pid_events_t *)val)->wr_traps);
+    pid_events_t *val = (pid_events_t *)data;
+    g_hash_table_destroy(val->write_exec_map);
+    g_hash_table_destroy(val->wr_traps);
+    free(val->process_name);
     g_slice_free(pid_events_t, val);
 }
 
@@ -251,6 +253,7 @@ pid_events_t *add_new_pid(vmi_pid_t pid)
     pval->wr_traps = g_hash_table_new_full(g_direct_hash, g_direct_equal,
                                            NULL, NULL);
     g_hash_table_insert(vmi_events_by_pid, GINT_TO_POINTER(pid), pval);
+    pval->process_name = NULL;
     return pval;
 }
 
@@ -502,6 +505,8 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
                 //vmi_pagetable_lookup(vmi, evt_cr3, event->x86_regs->rip, &rip_pa);
                 fprintf(stderr, "%s: trapping table, pid=%d evt_cr3=0x%lx\n", __FUNCTION__, pid, evt_cr3);
                 g_hash_table_insert(cr3_to_pid, (gpointer)evt_cr3, GINT_TO_POINTER(pid));
+                if (!pid_event->process_name)
+                  pid_event->process_name = vmi_current_name(vmi, event);
                 monitor_trap_table(vmi, pid_event);
             }
             else
@@ -849,6 +854,7 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     g_hash_table_insert(cr3_to_pid, (gpointer)pid_event->cr3, 0);
     fprintf(stderr, "%s: pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
 
+    //the table trap is delayed until the pid is first seen in monitor_handler_cr3()
     //monitor_trap_table(vmi, pid_event);
     volatility_vadinfo(pid, "", dump_count);
     dump_count++;
