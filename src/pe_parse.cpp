@@ -278,35 +278,41 @@ int printSecs(void *N,
   std::cout << std::dec << static_cast<std::uint64_t>(p->peHeader.nt.x) \
             << "\n";
 
-extern "C" void show_imports(const char* filepath) {
-  parsed_pe *p = ParsePEFromFile(filepath);
-
-  if (p != NULL) {
-    // print out some things
-    if (p->peHeader.nt.OptionalMagic == NT_OPTIONAL_32_MAGIC) {
-      DUMP_FIELD(OptionalHeader.AddressOfEntryPoint);
+extern "C" {
+  void show_imports(const char* filepath) {
+    parsed_pe *p = ParsePEFromFile(filepath);
+    if (p != NULL) {
+      // print out some things
+      if (p->peHeader.nt.OptionalMagic == NT_OPTIONAL_32_MAGIC) {
+        DUMP_FIELD(OptionalHeader.AddressOfEntryPoint);
+      } else {
+        DUMP_FIELD(OptionalHeader64.AddressOfEntryPoint);
+      }
+  #undef DUMP_FIELD
+  #undef DUMP_DEC_FIELD
+      show_parsed_imports(p);
+      DestructParsedPE(p);
     } else {
-      DUMP_FIELD(OptionalHeader64.AddressOfEntryPoint);
+      std::cout << "Error: " << GetPEErr() << " (" << GetPEErrString() << ")"
+                << "\n";
+      std::cout << "Location: " << GetPEErrLoc() << "\n";
     }
-
-#undef DUMP_FIELD
-#undef DUMP_DEC_FIELD
-
-    show_parsed_imports(p);
-
-    DestructParsedPE(p);
-  } else {
-    std::cout << "Error: " << GetPEErr() << " (" << GetPEErrString() << ")"
-              << "\n";
-    std::cout << "Location: " << GetPEErrLoc() << "\n";
   }
-}
 
-extern "C" void show_parsed_imports(parsed_pe *p) {
+  void show_parsed_imports(parsed_pe *p) {
     std::cout << "Imports: " << "\n";
     IterImpVAString(p, printImports, NULL);
-}
+  }
 
-extern "C" void free_parsed_pe(parsed_pe *p) {
+  void free_parsed_pe(parsed_pe *p) {
     DestructParsedPE(p);
+  }
+
+  bounded_buffer_t malloc_bounded_buffer(size_t size) {
+    return mallocBuffer(size);
+  }
+
+  parsed_pe_t parse_pe_buffer(bounded_buffer_t buf) {
+    return ParsePEFromBuffer(buf);
+  }
 }
