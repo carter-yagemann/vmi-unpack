@@ -31,6 +31,8 @@
 
 #include <vmi/process.h>
 
+#include <pe_parse.h>
+
 addr_t max_paddr;
 bool page_table_monitor_init;
 vmi_event_t page_table_monitor_event;
@@ -119,6 +121,14 @@ typedef struct
 
 typedef struct
 {
+    int sequence;
+    int pe_index;
+    parsed_pe_t parsed_pe;
+    GPtrArray *vadinfo_maps;
+} vadinfo_bundle_t;
+
+typedef struct
+{
     vmi_pid_t pid;
     char *process_name;
     reg_t cr3;
@@ -126,6 +136,7 @@ typedef struct
     page_table_monitor_cb_t cb;
     GHashTable *write_exec_map;
     GHashTable *wr_traps;
+    GPtrArray *vadinfo_bundles;
 } pid_events_t;
 
 typedef struct

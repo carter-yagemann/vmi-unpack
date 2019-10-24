@@ -237,6 +237,7 @@ void destroy_watched_pid(gpointer data)
     g_hash_table_destroy(val->write_exec_map);
     g_hash_table_destroy(val->wr_traps);
     free(val->process_name);
+    if (val->vadinfo_bundles) g_ptr_array_unref(val->vadinfo_bundles);
     g_slice_free(pid_events_t, val);
 }
 
@@ -254,6 +255,7 @@ pid_events_t *add_new_pid(vmi_pid_t pid)
                                            NULL, NULL);
     g_hash_table_insert(vmi_events_by_pid, GINT_TO_POINTER(pid), pval);
     pval->process_name = NULL;
+    pval->vadinfo_bundles = NULL;
     return pval;
 }
 
