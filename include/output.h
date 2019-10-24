@@ -52,5 +52,6 @@ void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid
 int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
 int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
 char* make_vadinfo_json_fn(vmi_pid_t pid, int count);
+gboolean find_process_in_vads(vmi_instance_t vmi, pid_events_t *pid_evts, int count);
 
 #endif

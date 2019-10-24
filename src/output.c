@@ -20,11 +20,15 @@
  * SOFTWARE.
  */
 
+//strcasestr() is a GNU extension
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits.h> //PATH_MAX
 #include <unistd.h> //sysconf(_SC_PAGESIZE)
 #include <sys/stat.h> //mkdir()
+#include <string.h> //strcasestr()
 
 #include <libvmi/libvmi.h>
 #include <json-glib/json-glib.h>
@@ -329,4 +333,137 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     free(filepath);
 
     return 0;
+}
+
+gint find_process_in_vad(gconstpointer vad, gconstpointer name)
+{
+  JsonNode *fnwd_node = g_hash_table_lookup((gpointer)vad, "FileNameWithDevice");
+  if (strcasestr(json_node_get_string(fnwd_node), name))
+    return 0; //found
+  return -1;
+}
+
+void free_bundle(gpointer data)
+{
+  vadinfo_bundle_t *bundle = (vadinfo_bundle_t*)data;
+  if (bundle->parsed_pe) free_parsed_pe(bundle->parsed_pe);
+  g_ptr_array_unref(bundle->vadinfo_maps);
+  g_free(bundle);
+}
+
+GPtrArray* map_process_vads(vmi_pid_t pid, int count)
+{
+  GPtrArray *column_names;
+  GPtrArray *maps = NULL;
+  GHashTable *map;
+  char *filepath = NULL, *tmp_str;
+  JsonParser *parser = NULL;
+  JsonNode *root = NULL, *node;
+  JsonObject *root_obj;
+  JsonArray *columns_arr, *rows_arr, *row_arr;
+  guint len;
+  int i, j;
+
+  filepath = make_vadinfo_json_fn(pid, count);
+  parser = read_json_file(filepath);
+  if (!parser)
+  {
+      goto out;
+  }
+
+  root = json_parser_get_root(parser);
+  root_obj = json_node_get_object(root);
+  columns_arr = json_object_get_array_member(root_obj, "columns");
+  rows_arr = json_object_get_array_member(root_obj, "rows");
+
+  column_names = g_ptr_array_new();
+  len = json_array_get_length(columns_arr);
+  for (i = 0; i < len; i++)
+  {
+    node = json_array_get_element(columns_arr, i);
+    tmp_str = json_node_dup_string(node);
+    g_ptr_array_add(column_names, tmp_str);
+  }
+
+  maps = g_ptr_array_new_with_free_func((GDestroyNotify)g_hash_table_unref);
+  len = json_array_get_length(rows_arr);
+  for (i = 0; i < len; i++)
+  {
+    row_arr = json_array_get_array_element(rows_arr, i);
+    map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)json_node_unref);
+    g_ptr_array_add(maps, map);
+    for (j = 0; j < column_names->len; j++)
+    {
+      node = json_array_dup_element(row_arr, j);
+      g_hash_table_insert(map, g_ptr_array_index(column_names, j), node);
+    }
+  }
+
+out:
+  g_ptr_array_unref(column_names);
+  g_object_unref(parser);
+  free(filepath);
+  return maps;
+}
+
+gboolean find_process_in_vads(vmi_instance_t vmi, pid_events_t *pid_evts, int count)
+{
+  guint process_idx;
+  gboolean found = false;
+  GPtrArray *maps = NULL;
+  vadinfo_bundle_t *vad_bundle;
+
+  if (count < 0) goto out;
+
+  if (!pid_evts->vadinfo_bundles)
+  {
+    pid_evts->vadinfo_bundles = g_ptr_array_new_with_free_func(free_bundle);
+  }
+
+  if (count < pid_evts->vadinfo_bundles->len)
+  {
+    vad_bundle = g_ptr_array_index(pid_evts->vadinfo_bundles, count);
+    if (!vad_bundle->vadinfo_maps)
+    {
+      maps = map_process_vads(pid_evts->pid, count);
+      vad_bundle->vadinfo_maps = maps;
+    }
+    else
+      maps = vad_bundle->vadinfo_maps;
+  }
+  else if (count != (pid_evts->vadinfo_bundles->len))
+    goto out;
+  else {
+    maps = map_process_vads(pid_evts->pid, count);
+    vad_bundle = g_slice_new(vadinfo_bundle_t);
+    vad_bundle->sequence = count;
+    vad_bundle->vadinfo_maps = maps;
+    g_ptr_array_add(pid_evts->vadinfo_bundles, vad_bundle);
+    vad_bundle->pe_index = -1;
+    vad_bundle->parsed_pe = NULL;
+  }
+
+  found = g_ptr_array_find_with_equal_func(maps, pid_evts->process_name, find_process_in_vad, &process_idx);
+  if (found)
+  {
+    addr_t start;
+    addr_t end;
+    size_t size;
+    size_t actual_size;
+    bounded_buffer_t orig_exe;
+    GHashTable *pe_map;
+
+    vad_bundle->pe_index = process_idx;
+    pe_map = g_ptr_array_index(maps, process_idx);
+    start = (addr_t)json_node_get_int(g_hash_table_lookup(pe_map, "Start"));
+    end = (addr_t)json_node_get_int(g_hash_table_lookup(pe_map, "End"));
+    size = end - start;
+    orig_exe = malloc_bounded_buffer(size);
+    //buf is the first member of bounded_buffer. so, cheat, and just use the pointer as-is.
+    vmi_read_va(vmi, start, pid_evts->pid, size, orig_exe /*orig_exe->buf*/, &actual_size);
+    //TODO check actual_size
+    vad_bundle->parsed_pe = parse_pe_buffer(orig_exe);
+  }
+out:
+  return found;
 }
