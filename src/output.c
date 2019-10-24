@@ -194,7 +194,14 @@ out:
 
 //#define DEBUG_ADD_RIP_TO_JSON 1
 
-int add_rip_to_json(vmi_pid_t pid, int dump_count, reg_t rip)
+char* make_vadinfo_json_fn(vmi_pid_t pid, int count)
+{
+    char *filepath = malloc(PATH_MAX);
+    snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, count, (long)pid);
+    return filepath;
+}
+
+int add_rip_to_json(vmi_pid_t pid, int count, reg_t rip)
 {
     char rip_buf[32] = {0};
     // "0x1122334455667788"
@@ -209,8 +216,7 @@ int add_rip_to_json(vmi_pid_t pid, int dump_count, reg_t rip)
     JsonObject *obj = NULL;
 #endif
 
-    filepath = malloc(PATH_MAX);
-    snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
+    filepath = make_vadinfo_json_fn(pid, count);
  
     parser = read_json_file(filepath);
     if (!parser)
