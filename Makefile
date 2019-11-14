@@ -35,8 +35,6 @@ CRYPTO_LIBS := $(shell pkg-config --libs openssl)
 ALL_LIBS += $(CRYPTO_LIBS)
 
 CXX_LIBS := -lstdc++
-PE_LIBS := -lpe-parser-library
-CXX_LIBS += $(PE_LIBS)
 ALL_LIBS += $(CXX_LIBS)
 
 LIBVMI_CFLAGS := $(shell pkg-config --cflags libvmi)

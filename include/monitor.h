@@ -31,8 +31,6 @@
 
 #include <vmi/process.h>
 
-#include <pe_parse.h>
-
 addr_t max_paddr;
 bool page_table_monitor_init;
 vmi_event_t page_table_monitor_event;
