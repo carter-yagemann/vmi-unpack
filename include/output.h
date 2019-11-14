@@ -26,6 +26,11 @@
 #include <libvmi/libvmi.h>
 
 #define MAX_PE_HEADER_SIZE 1024
+//section header permissions
+#define IMAGE_SCN_CNT_CODE (1<<5)
+#define IMAGE_SCN_MEM_EXECUTE (1<<29)
+#define IMAGE_SCN_MEM_READ (1<<30)
+#define IMAGE_SCN_MEM_WRITE (1<<31)
 
 
 extern int dump_count;
@@ -54,6 +59,7 @@ void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid
 
 int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
 int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
+int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_va, const char *cmd_prefix, int dump_count);
 char* make_vadinfo_json_fn(vmi_pid_t pid, int count);
 gboolean find_process_in_vads(vmi_instance_t vmi, pid_events_t *pid_evts, int count);
 void show_parsed_pe(parsed_pe_t *pe);

@@ -281,6 +281,8 @@ void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid
     volatility_vadinfo(pid, cmd_prefix, dump_count);
 
     base_va = pid_event->peb_imagebase_va ? pid_event->peb_imagebase_va : pid_event->vad_pe_start;
+    volatility_impscan(vmi, pid_event, base_va, cmd_prefix, dump_count);
+
     oep = event->x86_regs->rip - base_va;
     fprintf(stderr, "%s: rip=%p base_va=%p oep=%p\n", __func__,
         (void*)event->x86_regs->rip, (void*)base_va, (void*)oep);
@@ -337,6 +339,85 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
     snprintf(cmd, cmd_max - 1, vadinfo_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
     queue_and_wait_for_shell_cmd(cmd, stdout_path);
+
+    free(cmd);
+    free(filepath);
+
+    return 0;
+}
+
+int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_va, const char *cmd_prefix, int dump_count)
+{
+    /*
+     *  volatility -l vmi://win7-borg --profile=Win7SP0x64 \
+     *  impscan --offset 0xffffaaaabbbb --base 0x407000 --size 8192 \
+     *  -p 2448 --output=json --output-file=calc_upx.exe.impscan.section0000.json
+
+     *    config.add_option('OFFSET', short_option = 'o', default = None,
+     *                      help = 'EPROCESS offset (in hex) in the physical address space',
+     *                      action = 'store', type = 'int')
+     *    # The base address in kernel or process memory where
+     *    # we begin scanning. This is an executable region with
+     *    # assembly instructions like a .text or .code PE section.
+     *    config.add_option('BASE', short_option = 'b', default = None,
+     *                      help = 'Base address in process memory if --pid ' +
+     *                      'is supplied, otherwise an address in kernel space',
+     *                      action = 'store', type = 'int')
+     *    # The size in bytes of data to scan from the base address.
+     *    config.add_option('SIZE', short_option = 's', default = None,
+     *                      help = 'Size of memory to scan',
+     *                      action = 'store', type = 'int')
+     */
+
+    // vmi_pid_t is int32_t which can be int or long
+    // so, for pid, we use %ld and cast to long
+    const char *impscan_cmd = "%svolatility -l vmi://%s --profile=%s"
+      " impscan --offset %lx --base %lx --size %zu"
+      " --output=json --output-file=%s 2>&1 -p %ld";
+
+    const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
+    char *cmd = NULL;
+    const size_t cmd_max = PAGE_SIZE;
+    char *filepath = NULL;
+    char *stdout_path = "/dev/null";
+    vadinfo_bundle_t *vad_bundle;
+    parsed_pe_t *pe;
+    struct section_header *section_table;
+    size_t num_sections;
+    int s;
+
+    cmd = malloc(cmd_max);
+    filepath = malloc(PATH_MAX);
+
+    //re-parse pe, call find_process_in_vads()
+    find_process_in_vads(vmi, pid_event, dump_count);
+    vad_bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
+    pe = vad_bundle->parsed_pe;
+    section_table = pe->section_table;
+    num_sections = pe->pe_header->number_of_sections;
+    //for each section with exec
+    //  call impscan(eprocess, imagebase + section_rva, size)
+    for (s=0; s < num_sections; s++) {
+      if (section_table[s].characteristics & IMAGE_SCN_MEM_EXECUTE) {
+        addr_t section_rva = section_table[s].virtual_address;
+        size_t section_size = section_table[s].a.virtual_size;
+        if (section_size == 0) {
+          addr_t next_sec_rva;
+          if (s == num_sections - 1)
+            next_sec_rva = pid_event->vad_pe_size;
+          else
+            next_sec_rva = section_table[s+1].virtual_address;
+          section_size = next_sec_rva - section_rva;
+        }
+        snprintf(filepath, PATH_MAX - 1, "%s/impscan.section%04d.%04d.%ld.json",
+            output_dir, s, dump_count, (long)pid_event->pid);
+        snprintf(cmd, cmd_max - 1, impscan_cmd,
+          cmd_prefix, domain_name, vol_profile,
+          pid_event->eprocess, base_va + section_rva, section_size,
+          filepath, (long)pid_event->pid);
+        queue_and_wait_for_shell_cmd(cmd, stdout_path);
+      }
+    }
 
     free(cmd);
     free(filepath);
