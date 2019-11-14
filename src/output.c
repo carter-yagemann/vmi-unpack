@@ -31,6 +31,7 @@
 #include <string.h> //strcasestr()
 
 #include <libvmi/libvmi.h>
+#include <libvmi/peparse.h>
 #include <json-glib/json-glib.h>
 
 #include <monitor.h>
@@ -427,6 +428,85 @@ out:
   return maps;
 }
 
+void show_parsed_pe(parsed_pe_t *pe)
+{
+    uint32_t c;
+    addr_t pe_imagebase;
+
+    printf("\tSignature: %u.\n", pe->pe_header->signature);
+    printf("\tMachine: %u.\n", pe->pe_header->machine);
+    printf("\t# of sections: %u.\n", pe->pe_header->number_of_sections);
+    printf("\t# of symbols: %u.\n", pe->pe_header->number_of_symbols);
+    printf("\tTimestamp: %u.\n", pe->pe_header->time_date_stamp);
+    printf("\tCharacteristics: %u.\n", pe->pe_header->characteristics);
+    printf("\tOptional header size: %u.\n", pe->pe_header->size_of_optional_header);
+    printf("\tOptional header type: 0x%x\n", pe->oh_magic);
+
+    if (pe->oh_magic == IMAGE_PE32_MAGIC) {
+        pe_imagebase = ((struct optional_header_pe32 *)pe->opt_header)->image_base;
+    } else {
+        pe_imagebase = ((struct optional_header_pe32plus *)pe->opt_header)->image_base;
+    }
+    printf("\tPE ImageBase: %p\n", (void*)pe_imagebase);
+
+    for (c=0; c < pe->pe_header->number_of_sections; c++) {
+        // The character array is not null terminated, so only print the first 8 characters!
+        printf("\tSection %u: %.8s\n", c+1, pe->section_table[c].short_name);
+    }
+}
+
+gboolean parse_pe(vmi_instance_t vmi, pid_events_t *pid_event, parsed_pe_t *pe)
+{
+  status_t status;
+  addr_t imagebase;
+  addr_t section_addr;
+  size_t sec_tbl_sz;
+  access_context_t ctx = {
+    .translate_mechanism = VMI_TM_PROCESS_DTB,
+    .dtb = pid_event->cr3,
+  };
+  if (pid_event->peb_imagebase_va)
+    imagebase = pid_event->peb_imagebase_va;
+  else
+    imagebase = pid_event->vad_pe_start;
+  ctx.addr = imagebase;
+
+  pe->proc_first_page = malloc(MAX_PE_HEADER_SIZE);
+  status = peparse_get_image(vmi, &ctx, MAX_PE_HEADER_SIZE, pe->proc_first_page);
+  if (status != VMI_SUCCESS)
+  {
+    fprintf(stderr, "%s: error: cannot read PE header from imagebase=%p\n",
+        __func__, (void*)imagebase);
+    free(pe->proc_first_page);
+    pe->proc_first_page = NULL;
+    return false;
+  }
+
+  peparse_assign_headers(pe->proc_first_page, &pe->dos_header, &pe->pe_header,
+      &pe->oh_magic, &pe->opt_header, NULL, NULL);
+
+  section_addr = imagebase
+    + pe->dos_header->offset_to_pe
+    + sizeof(struct pe_header)
+    + pe->pe_header->size_of_optional_header;
+  sec_tbl_sz = pe->pe_header->number_of_sections * sizeof(struct section_header);
+  pe->section_table = malloc(sec_tbl_sz);
+  ctx.addr = section_addr;
+  status = vmi_read(vmi, &ctx, sec_tbl_sz, pe->section_table, NULL);
+  if (status != VMI_SUCCESS)
+  {
+    fprintf(stderr, "%s: error: cannot read PE section table from imagebase=%p\n",
+        __func__, (void*)pid_event->peb_imagebase_va);
+    free(pe->proc_first_page);
+    pe->proc_first_page = NULL;
+    free(pe->section_table);
+    pe->section_table = NULL;
+    return false;
+  }
+
+  return true;
+}
+
 gboolean find_process_in_vads(vmi_instance_t vmi, pid_events_t *pid_evts, int count)
 {
   guint process_idx;
@@ -471,20 +551,29 @@ gboolean find_process_in_vads(vmi_instance_t vmi, pid_events_t *pid_evts, int co
     addr_t start;
     addr_t end;
     size_t size;
-    size_t actual_size;
-    bounded_buffer_t orig_exe;
     GHashTable *pe_map;
+    parsed_pe_t *pe;
 
-    vad_bundle->pe_index = process_idx;
+    vad_bundle->pe_index = count;
     pe_map = g_ptr_array_index(maps, process_idx);
     start = (addr_t)json_node_get_int(g_hash_table_lookup(pe_map, "Start"));
+    pid_evts->vad_pe_start = start;
     end = (addr_t)json_node_get_int(g_hash_table_lookup(pe_map, "End"));
     size = end - start;
-    orig_exe = malloc_bounded_buffer(size);
-    //buf is the first member of bounded_buffer. so, cheat, and just use the pointer as-is.
-    vmi_read_va(vmi, start, pid_evts->pid, size, orig_exe /*orig_exe->buf*/, &actual_size);
-    //TODO check actual_size
-    vad_bundle->parsed_pe = parse_pe_buffer(orig_exe);
+    pid_evts->vad_pe_size = size;
+    fprintf(stderr, "%s: imagebase=%p pe_index=%d vad_pe_index=%d\n",
+      __func__, (void*)pid_evts->vad_pe_start, vad_bundle->pe_index, pid_evts->vad_pe_index);
+
+    pe = g_slice_new(parsed_pe_t);
+    pe->proc_first_page = NULL;
+    pe->section_table = NULL;
+    if (parse_pe(vmi, pid_evts, pe)) {
+      vad_bundle->parsed_pe = pe;
+      //update vad_pe_index to the latest scan
+      pid_evts->vad_pe_index = process_idx;
+    }
+    else
+      g_slice_free(parsed_pe_t, pe);
   }
 out:
   return found;

@@ -256,6 +256,9 @@ pid_events_t *add_new_pid(vmi_pid_t pid)
     g_hash_table_insert(vmi_events_by_pid, GINT_TO_POINTER(pid), pval);
     pval->process_name = NULL;
     pval->vadinfo_bundles = NULL;
+    pval->vad_pe_index = -1;
+    pval->vad_pe_start = HIGH_ADDR_MARK;
+    pval->vad_pe_size = 0;
     return pval;
 }
 
@@ -851,6 +854,8 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     else pid_event->cr3 = cr3;
     pid_event->flags = flags;
     pid_event->cb = cb;
+    pid_event->eprocess = vmi_get_process_by_cr3(vmi, cr3);
+    pid_event->peb_imagebase_va = vmi_get_imagebase_windows(vmi, pid_event->eprocess);
     //set the pid to 0 as a flag that its page table has not been scanned yet
     //then delay trapping its page table until it first executes
     g_hash_table_insert(cr3_to_pid, (gpointer)pid_event->cr3, 0);
