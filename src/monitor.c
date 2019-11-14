@@ -84,6 +84,11 @@ int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t
     return 1;
 }
 
+static inline int addr_in_range(addr_t suspect, addr_t start, size_t size)
+{
+  return (suspect >= start && suspect < (start + size));
+}
+
 // maintain global trapped_pages hash and set memory traps
 void monitor_set_trap(vmi_instance_t vmi, addr_t paddr, vmi_mem_access_t access, vmi_pid_t pid, page_cat_t cat)
 {
@@ -727,7 +732,9 @@ after_not_found:
         if (event->mem_event.out_access & VMI_MEMACCESS_X)
         {
             if ((my_pid_events->flags & MONITOR_HIGH_ADDRS) || event->mem_event.gla < HIGH_ADDR_MARK)
-                if (check_prev_vma(vmi, event, pid, event->mem_event.gla, paddr))
+                if (check_prev_vma(vmi, event, pid, event->mem_event.gla, paddr)
+                    && addr_in_range(event->x86_regs->rip, my_pid_events->vad_pe_start, my_pid_events->vad_pe_size)
+                    )
                     my_pid_events->cb(vmi, event, pid, trap->cat);
             monitor_untrap_vma(vmi, event, pid, vma);
         }
