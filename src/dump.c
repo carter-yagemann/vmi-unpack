@@ -327,6 +327,7 @@ void *shell_worker_loop(void *data)
         {
             capture_cmd(cmd->cmd, cmd->out_fn);
         }
+        free(cmd);
         pthread_cond_signal(&shell_cond);
     }
     fprintf(stderr, "%s:stopping shell worker loop\n", __func__);
