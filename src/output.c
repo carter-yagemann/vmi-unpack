@@ -464,6 +464,7 @@ gboolean find_process_in_vads(vmi_instance_t vmi, pid_events_t *pid_evts, int co
     vad_bundle->parsed_pe = NULL;
   }
 
+  if (!pid_evts->process_name) goto out;
   found = g_ptr_array_find_with_equal_func(maps, pid_evts->process_name, find_process_in_vad, &process_idx);
   if (found)
   {
