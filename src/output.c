@@ -335,12 +335,15 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     return 0;
 }
 
-gint find_process_in_vad(gconstpointer vad, gconstpointer name)
+gboolean find_process_in_vad(gconstpointer vad, gconstpointer name)
 {
   JsonNode *fnwd_node = g_hash_table_lookup((gpointer)vad, "FileNameWithDevice");
-  if (strcasestr(json_node_get_string(fnwd_node), name))
-    return 0; //found
-  return -1;
+  const char *fnwd_str = json_node_get_string(fnwd_node);
+  if (!strlen(fnwd_str))
+    return false;
+  if (strcasestr(fnwd_str, name))
+    return true; //found
+  return false;
 }
 
 void free_bundle(gpointer data)
