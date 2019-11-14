@@ -346,12 +346,26 @@ gboolean find_process_in_vad(gconstpointer vad, gconstpointer name)
   return false;
 }
 
+void free_pe(parsed_pe_t *pe)
+{
+  if (pe->proc_first_page)
+  {
+    free(pe->proc_first_page);
+  }
+  if (pe->section_table)
+  {
+    free(pe->section_table);
+  }
+  g_slice_free(parsed_pe_t, pe);
+}
+
 void free_bundle(gpointer data)
 {
   vadinfo_bundle_t *bundle = (vadinfo_bundle_t*)data;
-  if (bundle->parsed_pe) free_parsed_pe(bundle->parsed_pe);
+  if (bundle->parsed_pe)
+    free_pe(bundle->parsed_pe);
   g_ptr_array_unref(bundle->vadinfo_maps);
-  g_free(bundle);
+  g_slice_free(vadinfo_bundle_t, bundle);
 }
 
 GPtrArray* map_process_vads(vmi_pid_t pid, int count)
