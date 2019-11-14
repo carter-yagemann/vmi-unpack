@@ -373,7 +373,7 @@ GPtrArray* map_process_vads(vmi_pid_t pid, int count)
   GPtrArray *column_names;
   GPtrArray *maps = NULL;
   GHashTable *map;
-  char *filepath = NULL, *tmp_str;
+  char *filepath = NULL;
   JsonParser *parser = NULL;
   JsonNode *root = NULL, *node;
   JsonObject *root_obj;
@@ -398,8 +398,8 @@ GPtrArray* map_process_vads(vmi_pid_t pid, int count)
   for (i = 0; i < len; i++)
   {
     node = json_array_get_element(columns_arr, i);
-    tmp_str = json_node_dup_string(node);
-    g_ptr_array_add(column_names, tmp_str);
+    const char *val_str = json_node_get_string(node);
+    g_ptr_array_add(column_names, (char*)val_str);
   }
 
   maps = g_ptr_array_new_with_free_func((GDestroyNotify)g_hash_table_unref);
@@ -407,12 +407,16 @@ GPtrArray* map_process_vads(vmi_pid_t pid, int count)
   for (i = 0; i < len; i++)
   {
     row_arr = json_array_get_array_element(rows_arr, i);
-    map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)json_node_unref);
+    map = g_hash_table_new_full(g_str_hash, g_str_equal, free, (GDestroyNotify)json_node_unref);
     g_ptr_array_add(maps, map);
     for (j = 0; j < column_names->len; j++)
     {
+      char *new_str, *tmp_str;
       node = json_array_dup_element(row_arr, j);
-      g_hash_table_insert(map, g_ptr_array_index(column_names, j), node);
+      tmp_str = g_ptr_array_index(column_names, j);
+      new_str = malloc(strlen(tmp_str)+1);
+      strcpy(new_str, tmp_str);
+      g_hash_table_insert(map, new_str, node);
     }
   }
 
