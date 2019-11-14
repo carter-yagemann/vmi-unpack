@@ -505,13 +505,17 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
         {
             if (pid_event)
             {
-                //addr_t rip_pa = 0;
-                //vmi_v2pcache_flush(vmi, evt_cr3);
-                //vmi_pagetable_lookup(vmi, evt_cr3, event->x86_regs->rip, &rip_pa);
                 fprintf(stderr, "%s: trapping table, pid=%d evt_cr3=0x%lx\n", __FUNCTION__, pid, evt_cr3);
                 g_hash_table_insert(cr3_to_pid, (gpointer)evt_cr3, GINT_TO_POINTER(pid));
                 if (!pid_event->process_name)
                   pid_event->process_name = vmi_current_name(vmi, event);
+                if (find_process_in_vads(vmi, pid_event, dump_count)) {
+                  vadinfo_bundle_t *bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
+                  fprintf(stderr, "%s: pid=%d pe_index=%d\n", __FUNCTION__, pid, bundle->pe_index);
+                  //if (bundle->parsed_pe)
+                  //  show_parsed_pe(bundle->parsed_pe);
+                }
+                dump_count++;
                 monitor_trap_table(vmi, pid_event);
             }
             else
@@ -864,12 +868,6 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     //the table trap is delayed until the pid is first seen in monitor_handler_cr3()
     //monitor_trap_table(vmi, pid_event);
     volatility_vadinfo(pid, "", dump_count);
-    if (find_process_in_vads(vmi, pid_event, dump_count)) {
-      vadinfo_bundle_t *bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
-      fprintf(stderr, "%s: pid=%d pe_index=%d\n", __FUNCTION__, pid, bundle->pe_index);
-      show_parsed_imports(bundle->parsed_pe);
-    }
-    dump_count++;
 }
 
 void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)
