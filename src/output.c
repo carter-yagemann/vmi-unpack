@@ -335,6 +335,42 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     return 0;
 }
 
+int volatility_enumfunc(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
+{
+    /*  volatility --plugins=contrib/plugins/ -l vmi://win7-borg --profile=Win7SP0x64 \
+     *  enumfunc -P -I \
+     * -q 2448 --output=json --output-file=calc_upx.exe.enumfunc.json
+     */
+
+
+    // vmi_pid_t is int32_t which can be int or long
+    // so, for pid, we use %ld and cast to long
+    const char *enumfunc_cmd = "%svolatility --plugins=%s -l vmi://%s --profile=%s"
+      " enumfunc -P -I"
+      " --output=json --output-file=%s 2>&1 -q %ld";
+    const char *vol_plugins ="/home/wmartin45/src/volatility-community/EnumFunc/";
+    //const char *vol_plugins ="~/src/volatility-community/EnumFunc/";
+
+    const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
+    char *cmd = NULL;
+    const size_t cmd_max = PAGE_SIZE;
+    char *filepath = NULL;
+
+    cmd = malloc(cmd_max);
+    filepath = malloc(PATH_MAX);
+
+    // enumfunc
+    snprintf(filepath, PATH_MAX - 1, "%s/enumfunc.%04d.%ld.json", output_dir, dump_count, (long)pid);
+    snprintf(cmd, cmd_max - 1, enumfunc_cmd, cmd_prefix, vol_plugins, domain_name, vol_profile, filepath, (long)pid);
+    snprintf(filepath, PATH_MAX - 1, "%s/enumfunc_output.%04d.%ld", output_dir, dump_count, (long)pid);
+    queue_and_wait_for_shell_cmd(cmd, filepath);
+
+    free(cmd);
+    free(filepath);
+
+    return 0;
+}
+
 gboolean find_process_in_vad(gconstpointer vad, gconstpointer name)
 {
   JsonNode *fnwd_node = g_hash_table_lookup((gpointer)vad, "FileNameWithDevice");
