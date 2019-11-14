@@ -273,10 +273,18 @@ out:
 void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
     char *cmd_prefix = "";
+    addr_t oep;
+    addr_t base_va;
+    pid_events_t *pid_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
 
     volatility_vaddump(pid, cmd_prefix, dump_count);
     volatility_vadinfo(pid, cmd_prefix, dump_count);
-    add_rip_to_json(pid, dump_count, event->x86_regs->rip);
+
+    base_va = pid_event->peb_imagebase_va ? pid_event->peb_imagebase_va : pid_event->vad_pe_start;
+    oep = event->x86_regs->rip - base_va;
+    fprintf(stderr, "%s: rip=%p base_va=%p oep=%p\n", __func__,
+        (void*)event->x86_regs->rip, (void*)base_va, (void*)oep);
+    add_rip_to_json(pid, dump_count, oep);
 
     dump_count++;
 }
