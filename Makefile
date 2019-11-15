@@ -34,8 +34,8 @@ ALL_LIBS += $(JSON_LIBS)
 CRYPTO_LIBS := $(shell pkg-config --libs openssl)
 ALL_LIBS += $(CRYPTO_LIBS)
 
-CXX_LIBS := -lstdc++
-ALL_LIBS += $(CXX_LIBS)
+#CXX_LIBS := -lstdc++
+#ALL_LIBS += $(CXX_LIBS)
 
 LIBVMI_CFLAGS := $(shell pkg-config --cflags libvmi)
 ALL_CFLAGS += $(LIBVMI_CFLAGS)
