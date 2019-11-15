@@ -865,7 +865,7 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     else pid_event->cr3 = cr3;
     pid_event->flags = flags;
     pid_event->cb = cb;
-    pid_event->eprocess = vmi_get_process_by_cr3(vmi, cr3);
+    pid_event->eprocess = vmi_get_process_by_cr3(vmi, pid_event->cr3);
     pid_event->peb_imagebase_va = vmi_get_imagebase_windows(vmi, pid_event->eprocess);
     //set the pid to 0 as a flag that its page table has not been scanned yet
     //then delay trapping its page table until it first executes
