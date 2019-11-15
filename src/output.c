@@ -346,7 +346,7 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     return 0;
 }
 
-int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_va, const char *cmd_prefix, int dump_count)
+int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_va, const char *cmd_prefix, int count)
 {
     /*
      *  volatility -l vmi://win7-borg --profile=Win7SP0x64 \
@@ -390,8 +390,8 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
     filepath = malloc(PATH_MAX);
 
     //re-parse pe, call find_process_in_vads()
-    find_process_in_vads(vmi, pid_event, dump_count);
-    vad_bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
+    find_process_in_vads(vmi, pid_event, count);
+    vad_bundle = g_ptr_array_index(pid_event->vadinfo_bundles, count);
     pe = vad_bundle->parsed_pe;
     section_table = pe->section_table;
     num_sections = pe->pe_header->number_of_sections;
@@ -410,7 +410,7 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
           section_size = next_sec_rva - section_rva;
         }
         snprintf(filepath, PATH_MAX - 1, "%s/impscan.section%04d.%04d.%ld.json",
-            output_dir, s, dump_count, (long)pid_event->pid);
+            output_dir, s, count, (long)pid_event->pid);
         snprintf(cmd, cmd_max - 1, impscan_cmd,
           cmd_prefix, domain_name, vol_profile,
           pid_event->eprocess, base_va + section_rva, section_size,
