@@ -146,7 +146,7 @@ typedef struct
     GHashTable *write_exec_map;
     GHashTable *wr_traps;
     GPtrArray *vadinfo_bundles;
-    guint vad_pe_index;
+    int vad_pe_index;
     addr_t vad_pe_start;
     size_t vad_pe_size;
     addr_t eprocess;
