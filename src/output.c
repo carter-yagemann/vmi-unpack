@@ -517,30 +517,34 @@ out:
   return maps;
 }
 
-void show_parsed_pe(parsed_pe_t *pe)
+void show_parsed_pe(parsed_pe_t *pe, FILE* out_fd)
 {
     uint32_t c;
     addr_t pe_imagebase;
 
-    printf("\tSignature: %u.\n", pe->pe_header->signature);
-    printf("\tMachine: %u.\n", pe->pe_header->machine);
-    printf("\t# of sections: %u.\n", pe->pe_header->number_of_sections);
-    printf("\t# of symbols: %u.\n", pe->pe_header->number_of_symbols);
-    printf("\tTimestamp: %u.\n", pe->pe_header->time_date_stamp);
-    printf("\tCharacteristics: %u.\n", pe->pe_header->characteristics);
-    printf("\tOptional header size: %u.\n", pe->pe_header->size_of_optional_header);
-    printf("\tOptional header type: 0x%x\n", pe->oh_magic);
+    if (!out_fd)
+      out_fd = stderr;
+
+    fprintf(out_fd, "\tSignature: %u.\n", pe->pe_header->signature);
+    fprintf(out_fd, "\tMachine: %u.\n", pe->pe_header->machine);
+    fprintf(out_fd, "\t# of sections: %u.\n", pe->pe_header->number_of_sections);
+    fprintf(out_fd, "\t# of symbols: %u.\n", pe->pe_header->number_of_symbols);
+    fprintf(out_fd, "\tTimestamp: %u.\n", pe->pe_header->time_date_stamp);
+    fprintf(out_fd, "\tCharacteristics: %u.\n", pe->pe_header->characteristics);
+    fprintf(out_fd, "\tOptional header size: %u.\n", pe->pe_header->size_of_optional_header);
+    fprintf(out_fd, "\tOptional header type: 0x%x\n", pe->oh_magic);
 
     if (pe->oh_magic == IMAGE_PE32_MAGIC) {
         pe_imagebase = ((struct optional_header_pe32 *)pe->opt_header)->image_base;
     } else {
         pe_imagebase = ((struct optional_header_pe32plus *)pe->opt_header)->image_base;
     }
-    printf("\tPE ImageBase: %p\n", (void*)pe_imagebase);
+    fprintf(out_fd, "\tPE ImageBase: %p\n", (void*)pe_imagebase);
 
     for (c=0; c < pe->pe_header->number_of_sections; c++) {
         // The character array is not null terminated, so only print the first 8 characters!
-        printf("\tSection %u: %.8s\n", c+1, pe->section_table[c].short_name);
+        fprintf(out_fd, "\tSection %u: %.8s flags=0x%x\n",
+            c+1, pe->section_table[c].short_name, pe->section_table[c].characteristics);
     }
 }
 
