@@ -34,43 +34,6 @@ def verbose_print(msg):
         print(msg)
 
 
-def get_imports_from_json(fn, proc_name):
-    with open(fn, 'r') as json_fd:
-        json_dict = json.load(json_fd)
-    proc_dict = json_dict[proc_name]
-    proc_imports = proc_dict["imports"]
-    new_imports_dict = defaultdict(set)
-    for lib in proc_imports.values(): 
-        for entry in lib:
-            func_line = entry['name'].strip()
-            debug_print(
-                "from_json: func_line={}".format(func_line)
-            )
-            lib_name, func_name = func_line.split('!')
-            if not len(func_name):
-                continue
-            lib_name = lib_name.lower()
-            debug_print(
-                "from_json: lib={} func={}".format(lib_name, func_name)
-            )
-            new_imports_dict[lib_name].add(func_name)
-    return new_imports_dict
-
-
-def get_current_imports(_binary):
-    cur_libs = defaultdict(set)
-    for lib in _binary.imports:
-        lib_name = lib.name.lower()
-        for entry in lib.entries:
-            if entry.is_ordinal:
-                continue
-            debug_print(
-                "current_imports: lib={} func={}".format(lib_name, entry.name)
-            )
-            cur_libs[lib_name].add(entry.name)
-    return cur_libs
-
-
 def parse_volatility_json(fn):
     with open(fn, 'r') as fd:
         res = json.load(fd)
@@ -108,28 +71,6 @@ def fix_oep(_binary, oep):
         "old_oep={} new_oep={}".format(hex(old_oep), hex(new_oep))
     )
     _binary.optional_header.addressof_entrypoint = new_oep
-
-
-def get_imports_to_add(_cur, _new):
-    _to_add = defaultdict(set)
-    #copy _new since we are popping items
-    _new = dict(_new)
-    for cur_lib in _cur:
-        if cur_lib not in _new:
-            continue
-        for func in _new.pop(cur_lib):
-            if func not in _cur[cur_lib]:
-                debug_print(
-                    "existing_lib={} new_func={}".format(cur_lib, func)
-                )
-                _to_add[cur_lib].add(func)
-    for new_lib in _new:
-        for func in _new[new_lib]:
-            debug_print(
-                "new_lib={} new_func={}".format(new_lib, func)
-            )
-            _to_add[new_lib].add(func)
-    return _to_add
 
 
 def add_new_imports(_binary, _new):
@@ -346,23 +287,153 @@ def patch_iat(_bin, _impscan):
         for i, b in enumerate(buf):
             sec_bytes[off + i] = b
         imports_sec.content = sec_bytes
+
+
+def create_ldr_map(_fn):
+    ldr_raw, _ = parse_volatility_json(_fn)
+    ldr_map = [_nc(l['MappedPath'])
+               for l in ldr_raw]
+    return ldr_map
+
+
+def read_dll_redirects(in_fn):
+    with open(in_fn, 'r') as fd:
+        _win7_redirects = json.load(fd)
+    return _win7_redirects
+
+
+def create_imports_by_jump(_raw):
+    _imports_by_jump = {i['IAT']: i for i in _raw}
+    return _imports_by_jump
+
+
+def get_split_jumps(_imp_by_j):
+    sorted_jumps = sorted(_imp_by_j.keys())
+    split_jumps = []
+    last_jump = sorted_jumps[0]
+    cur_jumps = [last_jump]
+    for jump in sorted_jumps[1:]:
+        #debug_print(f"split_jumps: {jump}")
+        if jump == last_jump + 4:
+            cur_jumps.append(jump)
+        else:
+            split_jumps.append(cur_jumps)
+            cur_jumps = [jump]
+        last_jump = jump
+    split_jumps.append(cur_jumps)
+    return split_jumps
+
+
+def reconstruct_imports(_ldr_fn, _redir_fn, _impscan_obj):
+    #get map of DLLs that the binary mapped when it ran
+    _map = create_ldr_map(_ldr_fn)
+    #read master map of windows redirects
+    _redirs = read_dll_redirects(_redir_fn)
+    #map imports by IAT address
+    _imp_by_j = create_imports_by_jump(_impscan_obj.raw)
+    #sort and split up all the jumps by null-terminated gaps
+    _splits = get_split_jumps(_imp_by_j)
+
+    #do the magic
+    chosen_so_far = []
+    _new_imports = {}
+    #each jump set is one library to import
+    for j, jset in enumerate(_splits):
+        #count how many times each library.function combo can be used
+        lib_stats = defaultdict(int)
+        #keep track of each possible lib.func combo per jump
+        funcs_in_jset = []
+        scanned_func = []
+        #each jump is one function for this library
+        for jump in jset:
+            lib_name = _imp_by_j[jump]['Module']
+            lib_bn = _nc(lib_name)
+            func = _imp_by_j[jump]['Function']
+            debug_print(f"processing scanned function {lib_bn}.{func}")
+            scanned_func.append((lib_bn,func))
+            slot_dict = {lib_bn: func}
+            funcs_in_jset.append(slot_dict)
+            lib_stats[lib_bn] += 1
+            if lib_bn in _redirs and func in _redirs[lib_bn]:
+                redirs = _redirs[lib_bn][func]
+                for dll_path, other_func in redirs:
+                    if dll_path in _map:
+                        path_bn = ntpath.basename(dll_path)
+                        slot_dict[path_bn] = other_func
+                        lib_stats[path_bn] += 1
+        #print(lib_stats)
+        #figure out which lib to use:
+        #
+        found_candidate = False
+        #strategy 1:
+        #    there are N functions,
+        #    and foo.dll is seen N times,
+        #    of all libs counts, if only one of them is seen N times
+        #    then it, foo.dll, must be the correct lib
+        candidates = [lib
+                    for lib, count in lib_stats.items()
+                    if count >= len(jset)]
+        if len(candidates) == 1:
+            chosen_lib = candidates[0]
+            if chosen_lib not in chosen_so_far:
+                debug_print(f"choosing {chosen_lib}")
+                chosen_so_far.append(chosen_lib)
+                found_candidate = True
+            else:
+                print(f"error: strategy 1 used, "
+                      "but {chosen_lib} was already chosen")
+        else:
+        #strategy 2:
+        #   just pick the last lib that hasn't been chosen yet
+            for candidate in candidates[::-1]:
+                if candidate not in chosen_so_far:
+                    chosen_lib = candidate
+                    debug_print(f"choosing {chosen_lib}")
+                    chosen_so_far.append(chosen_lib)
+                    found_candidate = True
+                    break
+        if not found_candidate:
+            print(lib_stats)
+            print(candidates)
+            raise RuntimeError("no valid candidate found")
+        else:
+            #we found it
+            _new_imports[chosen_lib] = [slot[chosen_lib] for slot in funcs_in_jset]
+            for i, _scanned_tup in enumerate(scanned_func):
+                scanned_lib, _func = _scanned_tup
+                if scanned_lib != chosen_lib:
+                    f_rva = _impscan_obj.lookup[scanned_lib][_func]
+                    chosen_func = funcs_in_jset[i][chosen_lib]
+                    _impscan_obj.lookup[chosen_lib][chosen_func] = f_rva
+            if chosen_lib not in _impscan_obj.rva:
+                lib_jumps = _splits[j]
+                debug_print(f"lib_jumps[{j}] = chosen:{chosen_lib} = {lib_jumps}")
+                iat_start = min(lib_jumps) & 0xFFFF  # mask vaddr to make it rva
+                debug_print(f"iat_start for lib {chosen_lib} = {iat_start:x}")
+                _impscan_obj.rva[chosen_lib] = iat_start
+    return _new_imports
+
+
 @click.command()
 @click.argument('pe_fn')
 @click.argument('new_pe_fn')
-@click.argument('jsonfuncs_fn')
-@click.argument('proc_name')
 @click.argument('impscan_fn')
 @click.argument('oep')
-def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, impscan_fn, oep):
+@click.argument('ldr_fn')
+@click.argument('redirects_fn')
+def main(pe_fn, new_pe_fn, impscan_fn, oep, ldr_fn, redirects_fn):
     verbose_print("opening existing pe: file={}".format(pe_fn))
     with open(pe_fn, 'rb') as fd:
         pe_bytes = list(fd.read())
     binary = lief.parse(pe_bytes)
 
-    cur_imports = get_current_imports(binary)
-    new_imports = get_imports_from_json(jsonfuncs_fn, proc_name)
-    imports_to_add = get_imports_to_add(cur_imports, new_imports)
     impscan_obj = parse_impscan_json(impscan_fn)
+    imports_to_add = reconstruct_imports(ldr_fn, redirects_fn, impscan_obj)
+    verbose_print(
+        "found {} libraries with {} new import functions".format(
+            len(imports_to_add), sum([len(v) for k,v in imports_to_add.items()])
+        )
+    )
 
     fix_oep(binary, oep)
     virtual_size = get_virtual_memory_size(binary)
