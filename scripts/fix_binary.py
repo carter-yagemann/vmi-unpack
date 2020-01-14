@@ -125,19 +125,6 @@ def add_new_imports(_binary, _new):
             print("warning: left over library name={}".format(lib_name))
 
 
-def build_imports(_binary):
-    builder = lief.PE.Builder(_binary)
-    builder.build_imports(True)
-    builder.patch_imports(True)
-    builder.build()
-    return builder
-
-
-def save_build(_builder, new_fn):
-    debug_print("saving new pe: file={}".format(new_fn))
-    _builder.write(new_fn)
-
-
 def get_virtual_memory_size(_binary):
     min_offset = sys.maxsize
     total_size = 0
@@ -231,6 +218,19 @@ def fix_dll_characteristics(_binary):
     """remove dynamic base feature to prevent relocations"""
     _binary.optional_header.remove(lief.PE.DLL_CHARACTERISTICS.DYNAMIC_BASE)
     #_binary.optional_header.remove(lief.PE.DLL_CHARACTERISTICS.NX_COMPAT)
+
+
+def build_imports(_binary):
+    builder = lief.PE.Builder(_binary)
+    builder.build_imports(True)
+    builder.patch_imports(False)
+    builder.build()
+    return lief.parse(builder.get_build())
+
+
+def save_build(_builder, new_fn):
+    verbose_print("saving new pe: file={}".format(new_fn))
+    _builder.write(new_fn)
 
 
 @click.command()
