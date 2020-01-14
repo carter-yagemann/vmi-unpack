@@ -496,7 +496,7 @@ void free_bundle(gpointer data)
 
 GPtrArray* map_process_vads(vmi_pid_t pid, int count)
 {
-  GPtrArray *column_names;
+  GPtrArray *column_names = NULL;
   GPtrArray *maps = NULL;
   GHashTable *map;
   char *filepath = NULL;
@@ -547,8 +547,8 @@ GPtrArray* map_process_vads(vmi_pid_t pid, int count)
   }
 
 out:
-  g_ptr_array_unref(column_names);
-  g_object_unref(parser);
+  if (column_names) g_ptr_array_unref(column_names);
+  if (parser) g_object_unref(parser);
   free(filepath);
   return maps;
 }
