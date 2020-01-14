@@ -178,6 +178,18 @@ def fix_sections(sections, virtualmemorysize):
     fix_section(sections[num_sections - 1], virtualmemorysize)
 
 
+def restore_section_data(_binary, _bytes):
+    for section in _binary.sections:
+        start = section.virtual_address
+        end = start + section.virtual_size
+        section.content = _bytes[start:end]
+    _build = lief.PE.Builder(_binary)
+    _build.build_imports(False)
+    _build.patch_imports(False)
+    _build.build()
+    return lief.parse(_build.get_build())
+
+
 def fix_image_size(_binary, padded_size):
     sec_alignment = _binary.optional_header.section_alignment
     _binary.optional_header.sizeof_image = alignments(padded_size, sec_alignment)
@@ -220,7 +232,9 @@ def fix_dll_characteristics(_binary):
 @click.argument('oep')
 def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
     debug_print("opening existing pe: file={}".format(pe_fn))
-    binary = lief.parse(pe_fn)
+    with open(pe_fn, 'rb') as fd:
+        pe_bytes = list(fd.read())
+    binary = lief.parse(pe_bytes)
 
     cur_imports = get_current_imports(binary)
     new_imports = get_imports_from_json(jsonfuncs_fn, proc_name)
@@ -230,6 +244,7 @@ def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
     virtual_size = get_virtual_memory_size(binary)
     padded_virtual_size = align(virtual_size)
     fix_sections(binary.sections, padded_virtual_size)
+    binary = restore_section_data(binary, pe_bytes)
     fix_image_size(binary, padded_virtual_size)
     fix_section_mem_protections(binary)
     fix_checksum(binary)
