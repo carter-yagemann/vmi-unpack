@@ -3,6 +3,7 @@ from collections import defaultdict
 import json
 import sys
 
+import distorm3
 import lief
 
 #flags and constants
@@ -224,6 +225,111 @@ def fix_dll_characteristics(_binary):
             & ~IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
             )
 
+
+def find_section_from_ptr(addr, _binary):
+    base = _binary.optional_header.imagebase
+    if addr < base:
+        return None
+    lowest_vaddr = min([sec.virtual_address for sec in _binary.sections])
+    if addr >= base and addr < base + lowest_vaddr:
+        return addr
+    rva = addr - base
+    try:
+        _binary.section_from_rva(rva)
+        return addr
+    except lief.not_found:
+        return None
+
+
+def get_addr_in_operand(operand):
+    if (operand.type == 'AbsoluteMemoryAddress' or
+            operand.type == 'AbsoluteMemory'):
+        return operand.disp
+    if operand.type == 'Immediate':
+        return operand.value
+    return None
+
+
+def get_relocs(_bytes, _binary):
+    relocs = []
+    for op in distorm3.Decompose(0x0, _bytes, distorm3.Decode32Bits):
+        if not op.valid:
+            continue
+        operand_sizes = {}
+        total = 0
+        for i, operand in enumerate(op.operands):
+            addr_size = 0
+            if (operand.type == 'AbsoluteMemoryAddress' or
+                    operand.type == 'AbsoluteMemory'):
+                addr_size = int(operand.dispSize / 8)
+            if operand.type == 'Immediate':
+                addr_size = int(operand.size / 8)
+            if addr_size:
+                operand_sizes[i] = addr_size
+                total += addr_size
+        opcode_size = op.size - total
+        for i, operand in enumerate(op.operands):
+            addr = get_addr_in_operand(operand)
+            if (addr is not None and
+                find_section_from_ptr(addr, _binary) is not None):
+                addr_size = int(operand.size / 8)
+                offset = opcode_size + operand_sizes.get(i-1, 0)
+                rva = op.address + offset
+                #print(f"{rva:x}")
+                relocs.append(rva)
+    return relocs
+
+
+def get_all_relocations(_binary):
+    all_relocs = {}
+    for section in _binary.sections:
+        if section.has_characteristic(lief.PE.SECTION_CHARACTERISTICS.MEM_EXECUTE):
+            _bytes = bytes(section.content)
+            relocs = get_relocs(_bytes, _binary)
+            debug_print(f"section=0x{section.virtual_address:x} size={len(_bytes)} nr_reloc={len(relocs)}")
+            all_relocs[section.virtual_address] = relocs
+    return all_relocs
+
+
+def do_relocations(_all_relocs, _binary, new_base=0x400000):
+    va_type = lief.Binary.VA_TYPES.RVA
+    old_base = _binary.optional_header.imagebase
+    debug_print(f"do_relocations: old_base=0x{old_base:x}")
+    for vaddr, relocs in _all_relocs.items():
+        section = _binary.section_from_rva(vaddr)
+        section_bytes = section.content
+        for reloc in relocs:
+            ptr_addr = vaddr + reloc
+            debug_print(f"do_relocations: ptr_addr=0x{ptr_addr:x}")
+            #try:
+            #    buf = _binary.get_content_from_virtual_address(ptr_addr, 4, va_type)
+            #except:
+            #    debug_print(f"do_relocations: cannot read ptr_addr=0x{ptr_addr:x}")
+            #    continue
+            buf = section_bytes[reloc:reloc + 4]
+            buf_str = str(list(map(hex, buf)))
+            debug_print(f"do_relocations: buf_str=0x{buf_str}")
+            ptr = buf_to_uint32(buf)
+            debug_print(f"do_relocations: ptr=0x{ptr:x}")
+            if ptr < old_base:
+                continue
+            # example: old_base = 0xaa0000, new_base = 0x400000, ptr = 0xaa1234
+            # ptr - old_base == 0x1234, 0x1234 + new_base == 0x401234
+            new_ptr = (ptr - old_base) + new_base
+            debug_print(f"do_relocations: new_ptr=0x{new_ptr:x}")
+            new_ptr_bytes = uint32_to_buf(new_ptr)
+            buf_str = str(list(map(hex, new_ptr_bytes)))
+            debug_print(f"do_relocations: new_ptr_bytes=0x{buf_str}")
+            for i, _byte in enumerate(new_ptr_bytes):
+                section_bytes[reloc + i] = _byte
+            #_binary.patch_address(ptr_addr, new_ptr, 4, va_type)
+        section.content = section_bytes
+    _build = lief.PE.Builder(_binary)
+    _build.build_imports(False)
+    _build.patch_imports(False)
+    _build.build()
+    return lief.parse(_build.get_build())
+
 @click.command()
 @click.argument('pe_fn')
 @click.argument('new_pe_fn')
@@ -245,6 +351,8 @@ def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
     padded_virtual_size = align(virtual_size)
     fix_sections(binary.sections, padded_virtual_size)
     binary = restore_section_data(binary, pe_bytes)
+    all_relocs = get_all_relocations(binary)
+    binary = do_relocations(all_relocs, binary)
     fix_image_size(binary, padded_virtual_size)
     fix_section_mem_protections(binary)
     fix_checksum(binary)
