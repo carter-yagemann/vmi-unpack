@@ -272,7 +272,7 @@ out:
 
 void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
-    char *cmd_prefix = "";
+    char *cmd_prefix = "/home/wmartin45/bin/";
     addr_t oep;
     addr_t base_va;
     pid_events_t *pid_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
