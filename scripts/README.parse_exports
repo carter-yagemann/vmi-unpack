@@ -1,0 +1,141 @@
+Purpose:
+the parse_exports.py and related scripts are used to create a master list
+of dll redirects that are used to recontruct imports. the process only
+needs to be done once for each target system (such as your
+win7_64_unpack_v01 VMs or whatever) or when you update those systems with
+some silly dll that the malware wants (like VC runtime 9000 or whatever).
+
+Components:
+    A Windows VM, probably 64bit.
+        it's just needed for this process. no need to re-integrate it back into
+        your cluster, or even use a VM from your cluster. a local copy run from
+        Virtualbox or other VM tech is fine.
+    DLLEXP win32 program: used to scan a dll and produce TSV file with dll exports.
+        not needed on target VM once you have what you need. but, you could keep
+        it setup in a VM snapshot for future updates. VM snapshots exist. use them.
+    DLLEXP output files: it produces a TSV with the following fields:
+        function_name,vaddr,rva,ordinal,library_name,library_path,entry_type
+
+        if the function is a redirect, then the vaddr field will not be an address.
+        instead, it will be 'OTHERLIB.OTHERFUNC' instead. Examples:
+            InitializeSListHead NTDLL.RtlInitializeSListHead    0x000aa6c4  754 (0x2f2) kernel32.dll    C:\Windows\System32\kernel32.dll    Exported Function
+            RtlInitializeSListHead  0x78e9f830  0x0004f830  960 (0x3c0) ntdll.dll   C:\Windows\System32\ntdll.dll   Exported Function
+    find_dlls.ps1 powershell script: used to create a text file that contains
+        all of the DLLs found under c:\windows with each line being one full path
+    get_exports.ps1 powershell script: spawns dllexp command to scan a sublist
+        of dll file paths. it has two arguments:
+            directory base to CD into
+            file glob of one or more files that contain dll paths
+    parse_exports.py python3 script: used to do several tasks:
+        create exports json
+        update exports json
+        create redirects json
+        run import reconstruction test
+
+Phase 1: create a file with all exports from all DLLs on the system
+
+NOTE: DLLEXP does not need to be permanently installed to the target VM. you
+only need to do the exports process once (at least), then perhaps again later
+if you needed to add a new dll, like the VC runtime etc.
+
+get DLLEXP
+last known location: https://www.nirsoft.net/utils/dll_export_viewer.html
+
+put dllexp on target VM. it doesn't really matter where. "Documents\dllexp" would work.
+add dllexp's path to system path (OR make a batch file or otherwise make it work).
+
+For first-time runs:
+    # Or, if you are updating the system and don't know what DLLs have changed
+    # Or, if something goes wrong and corrupts your master redirects json
+    # Or, if you don't trust the update steps or yourself when updating
+    # The process doesn't take long. so you can just do the full process even
+    #   after an update
+    open powershell as administrator
+    PS> path\to\find_dlls.ps1
+
+    open powershell (normal, non-administrator)
+    PS> cp $env:TEMP\dll_fullpath_list.txt e:\my_virtualbox_shared_path\malware_stuff
+
+    unix shell on host system:
+    # dllexp can choke if you give it the full list
+    # so we use 'split' to split it up into 1000 DLL chunks
+    # some stats from win7_64:
+    #   $ wc -l dll_fullpath_list.txt
+    #   18680 dll_fullpath_list.txt
+    #   $ wc -l dllexp_all_exports_win7.txt
+    #   1133589 dllexp_all_exports_win7.txt
+    #   $ du -sh win7_*
+    #   224M    dllexp_all_exports_win7.txt
+    #   352M    win7_master_dll_exports.json
+    #   11M     win7_master_dll_redirects.json
+    $ cd some_base_path/my_virtualbox_shared_path/malware_stuff
+    # IMPORTANT: dllexp cannot read UTF8 or UTF8 w/ BOM or CP1258 etc
+    $ file dll_fullpath_list.txt 
+    dll_fullpath_list.txt: ASCII text, with CRLF line terminators
+    $ split dll_fullpath_list.txt dll_fullpath_list.splits.
+    $ ls dll_fullpath_list.splits.*
+
+    return to normal powershell
+    PS> cd e:\my_virtualbox_shared_path\malware_stuff
+    PS> path\to\get_exports.ps1 $(pwd)
+    # OR
+    PS> path\to\get_exports.ps1 $(pwd) some_other_glob.*
+
+    return to unix shell
+    $ ls dll_fullpath_list.splits.??
+    $ ls dll_fullpath_list.splits.??.dll_log
+    $ cat dll_fullpath_list.splits.??.dll_log > dllexp_all_exports_win7.txt
+    $ rm dll_fullpath_list.splits.??
+    $ rm dll_fullpath_list.splits.??.dll_log
+For updating the master exports:
+    unix shell on host system:
+    $ vim some_base_path/my_virtualbox_shared_path/malware_stuff/new_dlls.txt
+    # or otherwise create an ascii-encoded file with dll paths in it
+
+    return to normal powershell (or open powershell (normal, non-administrator))
+    PS> cd e:\my_virtualbox_shared_path\malware_stuff
+    PS> path\to\get_exports.ps1 $(pwd) new_dlls.txt
+
+    return to unix shell
+    $ ls new_dlls.txt.dll_log
+
+Phase 2: create master dll redirects json
+
+run the parse_exports.py script which does the following:
+    parses the DLLEXP tab-delimited output into a master exports json
+    update master dll exports using newly scanned exports
+    parses the master dll exports json,
+        filters in redirects only,
+        and create a master redirects json
+    does an import reconstruction test
+
+
+create exports and redirects, and run tests:
+    $ python3 parse_exports.py exports \
+        dllexp_all_exports_win7.txt master_dll_exports_win7.json
+    $ python3 parse_exports.py redirects \
+        master_dll_exports_win7.json master_dll_redirects_win7.json
+    $ python3 parse_exports.py test \
+        master_dll_redirects_win7.json \
+        impscan.section0000.0001.2752.json vadinfo.0001.2752.json
+
+update master exports and redirects, and run tests:
+    $ python3 parse_exports.py exports \
+        new_dlls.txt.dll_log new_dll_exports_win7.json
+    $ python3 parse_exports.py update \
+        master_dll_redirects_win7.json new_dll_exports_win7.json
+    $ python3 parse_exports.py redirects \
+        master_dll_exports_win7.json master_dll_redirects_win7.json
+    $ python3 parse_exports.py test \
+        master_dll_redirects_win7.json \
+        impscan.section0000.0001.2752.json vadinfo.0001.2752.json
+    $ ls new_dlls.txt.dll_log new_dll_exports_win7.json
+    $ rm new_dlls.txt.dll_log new_dll_exports_win7.json
+
+Phase 3: store master_dll_redirects_win7.json on VM host machine
+
+Well, you don't really need to store it on the host VM, but it makes sense
+to do so. After 'unpack' creates memory dumps and logs for each unpacked exe,
+a final fix_binary.py script is needed to turn it back into a runnable exe.
+
+that script needs the dll redirects for the target VM that was used for capture.
