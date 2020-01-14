@@ -339,6 +339,7 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     // vadinfo
     snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
     snprintf(cmd, cmd_max - 1, vadinfo_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
+    fprintf(stderr, "%s: cmd=%s\n", __func__, cmd);
     queue_and_wait_for_shell_cmd(cmd, stdout_path);
 
     free(cmd);
@@ -367,6 +368,7 @@ int volatility_ldrmodules(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     // vadinfo
     snprintf(filepath, PATH_MAX - 1, "%s/ldrmodules.%04d.%ld.json", output_dir, dump_count, (long)pid);
     snprintf(cmd, cmd_max - 1, ldrmodules_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
+    fprintf(stderr, "%s: cmd=%s\n", __func__, cmd);
     queue_and_wait_for_shell_cmd(cmd, stdout_path);
 
     free(cmd);
@@ -415,15 +417,20 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
     cmd = malloc(cmd_max);
     filepath = malloc(PATH_MAX);
 
+    fprintf(stderr, "%s: base_va=%p, pid=%ld, count=%d\n",
+        __func__, (void*)base_va, (long)pid_event->pid, count);
     //re-parse pe, call find_process_in_vads()
     find_process_in_vads(vmi, pid_event, count);
     vad_bundle = g_ptr_array_index(pid_event->vadinfo_bundles, count);
     pe = vad_bundle->parsed_pe;
+    show_parsed_pe(pe, stderr);
     section_table = pe->section_table;
     num_sections = pe->pe_header->number_of_sections;
+    fprintf(stderr, "%s: num_sections=%zu\n", __func__, num_sections);
     //for each section with exec
     //  call impscan(eprocess, imagebase + section_rva, size)
     for (s=0; s < num_sections; s++) {
+      fprintf(stderr, "%s: section=%d\n", __func__, s);
       if (section_table[s].characteristics & IMAGE_SCN_MEM_EXECUTE) {
         addr_t section_rva = section_table[s].virtual_address;
         size_t section_size = section_table[s].a.virtual_size;
@@ -441,8 +448,11 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
           cmd_prefix, domain_name, vol_profile,
           base_va + section_rva, section_size,
           filepath, (long)pid_event->pid);
+        fprintf(stderr, "%s: cmd=%s\n", __func__, cmd);
         queue_and_wait_for_shell_cmd(cmd, devnull_path);
       }
+      else
+        fprintf(stderr, "%s: section=%d is not EXECUTE\n", __func__, s);
     }
 
     free(cmd);
