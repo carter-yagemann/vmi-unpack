@@ -10,11 +10,6 @@ import lief
 DEBUG = False
 #DEBUG = True
 VERBOSE = True
-IMAGE_SCN_CNT_CODE = (1<<5)
-IMAGE_SCN_MEM_EXECUTE = (1<<29)
-IMAGE_SCN_MEM_READ = (1<<30)
-IMAGE_SCN_MEM_WRITE = (1<<31)
-IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE = (1<<6)
 
 _nc = lambda path: ntpath.normcase(path)
 
@@ -207,9 +202,14 @@ def fix_image_size(_binary, padded_size):
 
 def fix_section_mem_protections(_binary):
     #lazy strategy: make them all rwx
-    rwx_flags = (IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_EXECUTE)
+    rwx_flags = (
+            lief.PE.SECTION_CHARACTERISTICS.MEM_READ
+            | lief.PE.SECTION_CHARACTERISTICS.MEM_WRITE
+            | lief.PE.SECTION_CHARACTERISTICS.MEM_EXECUTE
+            )
     for sec in _binary.sections:
         sec.characteristics |= rwx_flags
+        sec.characteristics &= ~lief.PE.SECTION_CHARACTERISTICS.CNT_UNINITIALIZED_DATA
 
 
 def fix_checksum(_binary, checksum=0):
@@ -229,10 +229,8 @@ def fix_imagebase(_binary, base=0x400000):
 
 def fix_dll_characteristics(_binary):
     """remove dynamic base feature to prevent relocations"""
-    _binary.optional_header.dll_characteristics = (
-            _binary.optional_header.dll_characteristics
-            & ~IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
-            )
+    _binary.optional_header.remove(lief.PE.DLL_CHARACTERISTICS.DYNAMIC_BASE)
+    #_binary.optional_header.remove(lief.PE.DLL_CHARACTERISTICS.NX_COMPAT)
 
 
 @click.command()
