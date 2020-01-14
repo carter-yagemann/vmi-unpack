@@ -379,12 +379,9 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
 {
     /*
      *  volatility -l vmi://win7-borg --profile=Win7SP0x64 \
-     *  impscan --offset 0xffffaaaabbbb --base 0x407000 --size 8192 \
+     *  impscan --base 0x407000 --size 8192 \
      *  -p 2448 --output=json --output-file=calc_upx.exe.impscan.section0000.json
 
-     *    config.add_option('OFFSET', short_option = 'o', default = None,
-     *                      help = 'EPROCESS offset (in hex) in the physical address space',
-     *                      action = 'store', type = 'int')
      *    # The base address in kernel or process memory where
      *    # we begin scanning. This is an executable region with
      *    # assembly instructions like a .text or .code PE section.
@@ -401,14 +398,14 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
     // vmi_pid_t is int32_t which can be int or long
     // so, for pid, we use %ld and cast to long
     const char *impscan_cmd = "%svolatility -l vmi://%s --profile=%s"
-      " impscan --offset %lx --base %lx --size %zu"
-      " --output=json --output-file=%s 2>&1 -p %ld";
+      " impscan --base 0x%lx --size %zu"
+      " --output=json --output-file=%s 2>&1 --pid %ld";
 
     const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
     char *cmd = NULL;
     const size_t cmd_max = PAGE_SIZE;
     char *filepath = NULL;
-    char *stdout_path = "/dev/null";
+    char *devnull_path = "/dev/null";
     vadinfo_bundle_t *vad_bundle;
     parsed_pe_t *pe;
     struct section_header *section_table;
@@ -442,9 +439,9 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
             output_dir, s, count, (long)pid_event->pid);
         snprintf(cmd, cmd_max - 1, impscan_cmd,
           cmd_prefix, domain_name, vol_profile,
-          pid_event->eprocess, base_va + section_rva, section_size,
+          base_va + section_rva, section_size,
           filepath, (long)pid_event->pid);
-        queue_and_wait_for_shell_cmd(cmd, stdout_path);
+        queue_and_wait_for_shell_cmd(cmd, devnull_path);
       }
     }
 
