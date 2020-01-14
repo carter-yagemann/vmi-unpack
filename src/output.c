@@ -279,6 +279,7 @@ void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid
 
     volatility_vaddump(pid, cmd_prefix, dump_count);
     volatility_vadinfo(pid, cmd_prefix, dump_count);
+    volatility_ldrmodules(pid, cmd_prefix, dump_count);
 
     base_va = pid_event->peb_imagebase_va ? pid_event->peb_imagebase_va : pid_event->vad_pe_start;
     volatility_impscan(vmi, pid_event, base_va, cmd_prefix, dump_count);
@@ -338,6 +339,34 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
     // vadinfo
     snprintf(filepath, PATH_MAX - 1, "%s/vadinfo.%04d.%ld.json", output_dir, dump_count, (long)pid);
     snprintf(cmd, cmd_max - 1, vadinfo_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
+    queue_and_wait_for_shell_cmd(cmd, stdout_path);
+
+    free(cmd);
+    free(filepath);
+
+    return 0;
+}
+
+int volatility_ldrmodules(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
+{
+    //  volatility -l vmi://win7-borg --profile=Win7SP0x64 ldrmodules --output=json -p 2448 --output-file=calc_upx.exe.ldrmodules.json
+
+    // vmi_pid_t is int32_t which can be int or long
+    // so, for pid, we use %ld and cast to long
+    const char *ldrmodules_cmd = "%svolatility -l vmi://%s --profile=%s"
+        " ldrmodules --output=json --output-file=%s 2>&1 -p %ld";
+    const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
+    char *cmd = NULL;
+    const size_t cmd_max = PAGE_SIZE;
+    char *filepath = NULL;
+    char *stdout_path = "/dev/null";
+
+    cmd = malloc(cmd_max);
+    filepath = malloc(PATH_MAX);
+
+    // vadinfo
+    snprintf(filepath, PATH_MAX - 1, "%s/ldrmodules.%04d.%ld.json", output_dir, dump_count, (long)pid);
+    snprintf(cmd, cmd_max - 1, ldrmodules_cmd, cmd_prefix, domain_name, vol_profile, filepath, (long)pid);
     queue_and_wait_for_shell_cmd(cmd, stdout_path);
 
     free(cmd);
