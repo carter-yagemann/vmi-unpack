@@ -40,13 +40,6 @@ re_addr_64 = re.compile(address_patt_64, re.I)
 re_redir = re.compile(redir_patt)
 
 
-def parse_volatility_json(fn):
-    with open(fn, 'r') as fd:
-        res = json.load(fd)
-        vads = [dict(zip(res['columns'], r)) for r in res['rows']]
-    return (vads, res)
-
-
 def create_dll_exports(in_fn, out_fn):
     win7_dlls = defaultdict(dict)
     with open(in_fn, 'r') as fd:
@@ -75,6 +68,19 @@ def read_dll_exports(in_fn):
     with open(in_fn, 'r') as fd:
         win7_dlls = json.load(fd)
     return win7_dlls
+
+
+def update_dll_exports(master_fn, updates_fn):
+    with open(master_fn, 'r') as fd:
+        master_exports = json.load(fd)
+    with open(updates_fn, 'r') as fd:
+        updates_exports = json.load(fd)
+    for new_path in updates_exports:
+        if new_path in master_exports:
+            master_exports[new_path] = updates_exports[new_path]
+    with open(master_fn, 'w') as fd:
+        json.dump(master_exports, fd)
+    return master_exports
 
 
 def create_dll_redirects(_dlls, out_fn):
@@ -120,27 +126,6 @@ def create_dll_redirects(_dlls, out_fn):
     return _redirects
 
 
-def read_dll_redirects(in_fn):
-    with open(redirects_fn, 'r') as fd:
-        win7_redirects = json.load(fd)
-    return win7_redirects
-
-
-def create_ldr_map(_fn):
-    ldr_raw, _ = parse_volatility_json(_fn)
-    ldr_map = [_nc(l['MappedPath'])
-               for l in ldr_raw]
-    return ldr_map
-
-
-def read_impscan(_fn):
-    with open(_fn, 'r') as fd:
-        impscan_raw = json.load(fd)
-    impscan_map = [dict(zip(impscan_raw['columns'], r)) for r in impscan_raw['rows']]
-    imports_by_jump = {i['IAT']: i for i in impscan_map}
-    return imports_by_jump
-
-
 def show_imports_by_jump(_ibj):
     print("what was scanned from unpacked binary:")
     for jump in _ibj:
@@ -149,90 +134,9 @@ def show_imports_by_jump(_ibj):
         print(f"addr:{jump:08x} {mod}:{func}")
 
 
-def get_split_jumps(_imp_by_j):
-    sorted_jumps = sorted(_imp_by_j.keys())
-    split_jumps = []
-    last_jump = sorted_jumps[0]
-    cur_jumps = [last_jump]
-    for jump in sorted_jumps[1:]:
-        if jump == last_jump + 4:
-            cur_jumps.append(jump)
-        else:
-            split_jumps.append(cur_jumps)
-            cur_jumps = [jump]
-        last_jump = jump
-    split_jumps.append(cur_jumps)
-    return split_jumps
-
-
 def show_split_jumps(_sj):
     print("after sorted and splitting up all the jumps:")
     pprint(_sj)
-
-
-def reconstruct_imports(_splits, _imp_by_j, _map, _redirs):
-    #do the magic
-    chosen_so_far = []
-    _new_imports = {}
-    #each jump set is one library to import
-    for jset in _splits:
-        #count how many times each library.function combo can be used
-        lib_stats = defaultdict(int)
-        #keep track of each possible lib.func combo per jump
-        funcs_in_jset = []
-        #each jump is one function for this library
-        for jump in jset:
-            lib_bn = _nc(_imp_by_j[jump]['Module'])
-            func = _imp_by_j[jump]['Function']
-            slot_dict = {lib_bn: func}
-            funcs_in_jset.append(slot_dict)
-            lib_stats[lib_bn] += 1
-            if lib_bn in _redirs and func in _redirs[lib_bn]:
-                redirs = _redirs[lib_bn][func]
-                for dll_path, other_func in redirs:
-                    if dll_path in _map:
-                        path_bn = ntpath.basename(dll_path)
-                        slot_dict[path_bn] = other_func
-                        lib_stats[path_bn] += 1
-        #print(lib_stats)
-        #figure out which lib to use:
-        #
-        found_candidate = False
-        #strategy 1:
-        #    there are N functions,
-        #    and foo.dll is seen N times,
-        #    of all libs counts, if only one of them is seen N times
-        #    then it, foo.dll, must be the correct lib
-        candidates = [lib
-                    for lib, count in lib_stats.items()
-                    if count >= len(jset)]
-        if len(candidates) == 1:
-            chosen_lib = candidates[0]
-            if chosen_lib not in chosen_so_far:
-                #print(f"choosing {chosen_lib}")
-                chosen_so_far.append(chosen_lib)
-                found_candidate = True
-            else:
-                print(f"error: strategy 1 used, "
-                      "but {chosen_lib} was already chosen")
-        else:
-        #strategy 2:
-        #   just pick the last lib that hasn't been chosen yet
-            for candidate in candidates[::-1]:
-                if candidate not in chosen_so_far:
-                    chosen_lib = candidate
-                    #print(f"choosing {chosen_lib}")
-                    chosen_so_far.append(chosen_lib)
-                    found_candidate = True
-                    break
-        if not found_candidate:
-            print(lib_stats)
-            print(candidates)
-            raise RuntimeError("no valid candidate found")
-        else:
-            #we found it
-            _new_imports[chosen_lib] = [slot[chosen_lib] for slot in funcs_in_jset]
-    return _new_imports
 
 
 def show_new_imports(_imports, _impscan_obj):
@@ -248,31 +152,49 @@ def generate_redirects(exp_fn, redir_fn):
     create_dll_redirects(win7_dlls, redir_fn)
 
 
-def test_reconstruction():
-    impscan_obj = fix_binary.parse_impscan_json(impscan_fn)
-    new_imports = fix_binary.reconstruct_imports(ldr_fn, redirects_fn, impscan_obj)
+def test_reconstruction(_redirects_fn, _impscan_fn, _ldr_fn):
+    impscan_obj = fix_binary.parse_impscan_json(_impscan_fn)
+    new_imports = fix_binary.reconstruct_imports(_ldr_fn, _redirects_fn, impscan_obj)
     show_new_imports(new_imports, impscan_obj)
-    exit()
-    win7_redirects = read_dll_redirects(redirects_fn)
-    ldr_map = create_ldr_map(ldr_fn)
-    imports_by_jump = read_impscan(impscan_fn)
-    #json.dump(imports_by_jump, open('imports_by_jump.json', 'w'))
-    #show_imports_by_jump(imports_by_jump)
-    split_jumps = get_split_jumps(imports_by_jump)
-    #json.dump(split_jumps, open('split_jumps.json', 'w'))
-    #show_split_jumps(split_jumps)
-    new_imports = reconstruct_imports(split_jumps, imports_by_jump, ldr_map, win7_redirects)
 
-@click.command()
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command('exports')
 @click.argument('dllexp_fn')
 @click.argument('exports_fn')
+def cli_create_exports(dllexp_fn, exports_fn):
+    """create exports from dllexp input"""
+    create_dll_exports(dllexp_fn, exports_fn)
+
+
+@cli.command('redirects')
+@click.argument('exports_fn')
+@click.argument('redirects_fn')
+def cli_create_redirects(exports_fn, redirects_fn):
+    """create redirects from processing master exports json"""
+    generate_redirects(exports_fn, redirects_fn)
+
+
+@cli.command('test')
 @click.argument('redirects_fn')
 @click.argument('impscan_fn')
 @click.argument('ldr_fn')
-def main(dllexp_fn, exports_fn, redirects_fn, impscan_fn, ldr_fn):
-    create_dll_exports(dllexp_fn, exports_fn)
-    generate_redirects(exports_fn, redirects_fn)
-    test_reconstruction()
+def cli_run_test(redirects_fn, impscan_fn, ldr_fn):
+    """test import reconstruction"""
+    test_reconstruction(redirects_fn, impscan_fn, ldr_fn)
+
+
+@cli.command('update')
+@click.argument('master_fn')
+@click.argument('update_fn')
+def update(master_fn, update_fn):
+    """add new export updates to master exports json"""
+    update_dll_exports(master_fn, update_fn)
+
 
 if __name__ == '__main__':
-    main()
+    cli()
