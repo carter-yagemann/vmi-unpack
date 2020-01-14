@@ -7,6 +7,7 @@ import re
 import sys
 
 from blessings import Terminal
+import click
 from progressbar import ProgressBar
 
 import fix_binary
@@ -262,9 +263,16 @@ def test_reconstruction():
     #show_split_jumps(split_jumps)
     new_imports = reconstruct_imports(split_jumps, imports_by_jump, ldr_map, win7_redirects)
 
+@click.command()
+@click.argument('dllexp_fn')
+@click.argument('exports_fn')
+@click.argument('redirects_fn')
+@click.argument('impscan_fn')
+@click.argument('ldr_fn')
+def main(dllexp_fn, exports_fn, redirects_fn, impscan_fn, ldr_fn):
+    create_dll_exports(dllexp_fn, exports_fn)
+    generate_redirects(exports_fn, redirects_fn)
+    test_reconstruction()
 
 if __name__ == '__main__':
-    #create_dll_exports(dllexp_fn , exports_fn)
-    #generate_redirects(exports_fn, redirects_fn)
-    test_reconstruction()
-    exit()
+    main()
