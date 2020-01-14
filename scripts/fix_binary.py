@@ -2,6 +2,7 @@ import click
 from collections import defaultdict
 import json
 import ntpath
+import struct
 import sys
 
 import lief
@@ -10,8 +11,17 @@ import lief
 DEBUG = False
 #DEBUG = True
 VERBOSE = True
+import_blacklist = [
+#    "ntdll.dll",
+#    "wow64cpu.dll",
+#    "wow64.dll",
+#    "wow64win.dll",
+#    "kernelbase.dll",
+]
 
 _nc = lambda path: ntpath.normcase(path)
+buf_to_uint32 = lambda buf: struct.unpack("I", bytes(buf))[0]
+uint32_to_buf = lambda n: struct.pack("I", n)
 
 
 def debug_print(msg):
@@ -59,6 +69,33 @@ def get_current_imports(_binary):
             )
             cur_libs[lib_name].add(entry.name)
     return cur_libs
+
+
+def parse_volatility_json(fn):
+    with open(fn, 'r') as fd:
+        res = json.load(fd)
+        vads = [dict(zip(res['columns'], r)) for r in res['rows']]
+    return (vads, res)
+
+
+def parse_impscan_json(fn):
+    is_list, _ = parse_volatility_json(fn)
+    is_rva = defaultdict(lambda: int(0x10000))
+    is_lookup = defaultdict(dict)
+    for entry in is_list:
+        lib = _nc(entry['Module'])
+        if lib in import_blacklist:
+            continue
+        func = entry['Function']
+        iat = entry['IAT'] & 0xffff
+        if iat < is_rva[lib]:
+            is_rva[lib] = iat
+        is_lookup[lib][func] = iat
+    obj = lambda: None
+    obj.rva = is_rva
+    obj.lookup = is_lookup
+    obj.raw = is_list
+    return obj
 
 
 def fix_oep(_binary, oep):
@@ -239,13 +276,84 @@ def remove_iat_dir(_binary):
     _iat.size = 0
 
 
+def find_import_descriptor(lib_name, _bin):
+    import_dir = _bin.data_directory(lief.PE.DATA_DIRECTORY.IMPORT_TABLE)
+    sec = _bin.section_from_rva(import_dir.rva)
+    sec_base = sec.virtual_address
+    sec_bytes = bytes(sec.content)
+    found_offset = None
+    offset = import_dir.rva - sec_base
+    descriptor_bytes = bytes(sec_bytes[offset:offset+20])
+    lookup_rva, _, _, name_rva, iat_rva = struct.unpack("IIIII", descriptor_bytes)
+    while lookup_rva != 0x0 and name_rva != 0x0:
+        name_offset = name_rva - sec_base
+        if name_offset > len(sec_bytes) or name_offset <= 0x0:
+            debug_print(f"bad name_offset: 0x{name_offset:x}")
+        else:
+            tmp_name = ""
+            b = sec_bytes[name_offset]
+            while b != 0x0:
+                tmp_name += chr(b)
+                name_offset += 1
+                b = sec_bytes[name_offset]
+            debug_print(f"lib={tmp_name} offset=0x{offset:x}")
+            if _nc(tmp_name) == _nc(lib_name):
+                found_offset = offset
+        offset += 20
+        descriptor_bytes = bytes(sec_bytes[offset:offset+20])
+        (lookup_rva, _, _, name_rva, iat_rva
+        )= struct.unpack("IIIII", descriptor_bytes)
+    if found_offset is not None:
+        debug_print(f"found_offset=0x{found_offset:x}")
+    return sec, found_offset
+
+
+def patch_iat(_bin, _impscan):
+    import_descriptor_offsets = {}
+    imports_sec = None
+    addr_size = 4
+    for lib in _bin.imports:
+        if _nc(lib.name) not in _impscan.rva:
+            debug_print(f"cannot find rva for {lib.name}")
+            continue
+        il_rva = lib.import_lookup_table_rva
+        il_offset = _bin.rva_to_offset(il_rva)
+        il_section = _bin.section_from_offset(il_offset)
+        il_bytes = il_section.content
+        tb_offset = il_offset - il_section.pointerto_raw_data
+        tb_ptr = int(tb_offset)
+        tb_val = buf_to_uint32(bytes(il_bytes[tb_ptr:tb_ptr + addr_size]))
+        for entry in lib.entries:
+            #iat_val = int(entry.iat_value)
+            iat_val = tb_val
+            debug_print("{}:{}:iat_value=0x{:x}".format(lib.name, entry.name, iat_val))
+            vaddr = _impscan.lookup[_nc(lib.name)][entry.name]
+            old_iat = _bin.get_content_from_virtual_address(vaddr, 4)
+            old_iat = buf_to_uint32(old_iat)
+            debug_print("vaddr=0x{:x} old_iat=0x{:x}".format(vaddr, old_iat))
+            _bin.patch_address(vaddr, iat_val, size=4)
+            tb_ptr += addr_size
+            tb_val = buf_to_uint32(bytes(il_bytes[tb_ptr:tb_ptr + addr_size]))
+        new_rva = _impscan.rva[_nc(lib.name)]
+        debug_print("{}:old_rva=0x{:x} new_rva=0x{:x}".format(
+            lib.name, lib.import_address_table_rva, new_rva))
+        imports_sec, desc_offset = find_import_descriptor(lib.name, _bin)
+        #lib.import_address_table_rva = new_rva
+        #fix descriptor
+        sec_bytes = list(imports_sec.content)
+        buf = uint32_to_buf(new_rva)
+        off = int(desc_offset) + 16
+        for i, b in enumerate(buf):
+            sec_bytes[off + i] = b
+        imports_sec.content = sec_bytes
 @click.command()
 @click.argument('pe_fn')
 @click.argument('new_pe_fn')
 @click.argument('jsonfuncs_fn')
 @click.argument('proc_name')
+@click.argument('impscan_fn')
 @click.argument('oep')
-def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
+def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, impscan_fn, oep):
     verbose_print("opening existing pe: file={}".format(pe_fn))
     with open(pe_fn, 'rb') as fd:
         pe_bytes = list(fd.read())
@@ -254,6 +362,7 @@ def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
     cur_imports = get_current_imports(binary)
     new_imports = get_imports_from_json(jsonfuncs_fn, proc_name)
     imports_to_add = get_imports_to_add(cur_imports, new_imports)
+    impscan_obj = parse_impscan_json(impscan_fn)
 
     fix_oep(binary, oep)
     virtual_size = get_virtual_memory_size(binary)
@@ -268,6 +377,7 @@ def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
     add_new_imports(binary, imports_to_add)
     binary = build_imports(binary)
     remove_iat_dir(binary)
+    patch_iat(binary, impscan_obj)
     save_build(binary, new_pe_fn)
 
 if __name__ == '__main__':
