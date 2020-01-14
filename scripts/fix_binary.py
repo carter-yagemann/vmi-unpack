@@ -233,6 +233,12 @@ def save_build(_builder, new_fn):
     _builder.write(new_fn)
 
 
+def remove_iat_dir(_binary):
+    _iat = _binary.data_directory(lief.PE.DATA_DIRECTORY.IAT)
+    _iat.rva = 0
+    _iat.size = 0
+
+
 @click.command()
 @click.argument('pe_fn')
 @click.argument('new_pe_fn')
@@ -260,9 +266,9 @@ def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
     fix_dll_characteristics(binary)
 
     add_new_imports(binary, imports_to_add)
-    builder = build_imports(binary)
-    save_build(builder, new_pe_fn)
-
+    binary = build_imports(binary)
+    remove_iat_dir(binary)
+    save_build(binary, new_pe_fn)
 
 if __name__ == '__main__':
     main()
