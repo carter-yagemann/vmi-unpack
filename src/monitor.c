@@ -183,6 +183,11 @@ void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, m
     if (!exec_map)
     {
         fprintf(stderr, "WARNING: monitor_untrap_vma - Could not find exec_map for pid %d\n", pid);
+        fprintf(stderr, "%s: pid=%d, base_va=0x%lx, paddr=0x%lx\n", __func__,
+            pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
+        fprintf(stderr, "%s: my_pid_events=%p\n", __func__, my_pid_events);
+        fprintf(stderr, "%s: write_exec_map=%p\n", __func__, my_pid_events->write_exec_map);
+        fprintf(stderr, "%s: exec_map=%p\n", __func__, exec_map);
         vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         return;
     }
@@ -225,8 +230,11 @@ void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem
         if (!g_hash_table_contains(exec_map, (gpointer)event->mem_event.gfn))
         {
 #ifdef TRACE_TRAPS
-            fprintf(stderr, "monitor_trap_vma: %d, base_va=0x%lx, paddr=0x%lx\n",
+            fprintf(stderr, "%s: pid=%d, base_va=0x%lx, paddr=0x%lx\n", __func__,
                     pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
+            fprintf(stderr, "%s: my_pid_events=%p\n", __func__, my_pid_events);
+            fprintf(stderr, "%s: write_exec_map=%p\n", __func__, my_pid_events->write_exec_map);
+            fprintf(stderr, "%s: exec_map=%p\n", __func__, exec_map);
 #endif
             g_hash_table_add(exec_map, (gpointer)event->mem_event.gfn);
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);
