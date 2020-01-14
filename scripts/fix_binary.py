@@ -1,22 +1,32 @@
 import click
 from collections import defaultdict
 import json
+import ntpath
 import sys
 
 import distorm3
 import lief
 
 #flags and constants
-DEBUG = True
+DEBUG = False
+#DEBUG = True
+VERBOSE = True
 IMAGE_SCN_CNT_CODE = (1<<5)
 IMAGE_SCN_MEM_EXECUTE = (1<<29)
 IMAGE_SCN_MEM_READ = (1<<30)
 IMAGE_SCN_MEM_WRITE = (1<<31)
 IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE = (1<<6)
 
+_nc = lambda path: ntpath.normcase(path)
+
 
 def debug_print(msg):
     if DEBUG:
+        print(msg)
+
+
+def verbose_print(msg):
+    if VERBOSE:
         print(msg)
 
 
@@ -63,7 +73,7 @@ def fix_oep(_binary, oep):
     except ValueError:
         new_oep = int(oep)
     old_oep = int(_binary.optional_header.addressof_entrypoint)
-    debug_print(
+    verbose_print(
         "old_oep={} new_oep={}".format(hex(old_oep), hex(new_oep))
     )
     _binary.optional_header.addressof_entrypoint = new_oep
@@ -96,7 +106,7 @@ def add_new_imports(_binary, _new):
     _new = dict(_new)
     #first, add new functions for existing libraries
     for lib in _binary.imports:
-        lib_name = lib.name.lower()
+        lib_name = _nc(lib.name)
         if lib_name not in _new:
             continue
         for new_func in _new.pop(lib_name):
@@ -337,7 +347,7 @@ def do_relocations(_all_relocs, _binary, new_base=0x400000):
 @click.argument('proc_name')
 @click.argument('oep')
 def main(pe_fn, new_pe_fn, jsonfuncs_fn, proc_name, oep):
-    debug_print("opening existing pe: file={}".format(pe_fn))
+    verbose_print("opening existing pe: file={}".format(pe_fn))
     with open(pe_fn, 'rb') as fd:
         pe_bytes = list(fd.read())
     binary = lief.parse(pe_bytes)
