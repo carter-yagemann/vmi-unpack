@@ -44,6 +44,7 @@ matrix:
         - TEST="CUnit"
       script:
         - cd $TRAVIS_BUILD_DIR
+        - make
         - make test
         - ./bin/unit_tests
 
