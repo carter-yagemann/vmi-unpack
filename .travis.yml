@@ -45,7 +45,7 @@ matrix:
       script:
         - cd $TRAVIS_BUILD_DIR
         - make test
-        - ./test/unit
+        - ./test/unit_tests
 
     - os: linux
       env:
