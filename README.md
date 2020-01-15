@@ -187,3 +187,9 @@ Options:
                                  unpack  [required]
   --help                         Show this message and exit.
 ```
+
+## Producing Runnable Binaries
+
+VMI-Unpack now has an experimental post-processing step to turn its outputs into
+working, runnable PE executables. For more details, see the extra
+[documentation](scripts/README.parse_exports).
