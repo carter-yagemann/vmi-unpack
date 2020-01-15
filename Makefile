@@ -19,10 +19,10 @@
 # SOFTWARE.
 
 ifeq ($(CC),cc)
-CC := gcc-5
+CC := gcc
 endif
 ifeq ($(CXX),g++)
-CXX := g++-5
+CXX := g++
 endif
 
 LIBVMI_LIBS := $(shell pkg-config --libs libvmi)
