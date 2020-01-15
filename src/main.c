@@ -38,6 +38,7 @@ char *process_name = NULL;
 char *vol_profile = NULL;
 char *output_dir = NULL;
 char *rekall = NULL;
+char *vol_bin = NULL;
 vmi_pid_t process_pid = 0;
 uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
 
@@ -58,6 +59,7 @@ void usage(char *name)
     printf("Required arguments:\n");
     printf("    -d <domain_name>         Name of VM to unpack from.\n");
     printf("    -r <rekall_file>         Path to rekall file.\n");
+    printf("    -e <vol_bin>             Path to Volatility executable.\n");
     printf("    -v <vol_profile>         Volatility profile to use.\n");
     printf("    -o <output_dir>          Directory to dump layers into.\n");
     printf("\n");
@@ -111,7 +113,7 @@ int main(int argc, char *argv[])
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:v:o:p:n:fl")) != -1)
+    while ((c = getopt(argc, argv, "d:r:e:v:o:p:n:fl")) != -1)
     {
         switch (c)
         {
@@ -120,6 +122,9 @@ int main(int argc, char *argv[])
                 break;
             case 'r':
                 rekall = optarg;
+                break;
+            case 'e':
+                vol_bin = optarg;
                 break;
             case 'v':
                 vol_profile = optarg;
@@ -145,7 +150,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!domain_name || !rekall || !vol_profile || !output_dir ||
+    if (!domain_name || !rekall || !vol_bin || !vol_profile || !output_dir ||
         (process_pid == 0 && process_name == NULL))
     {
         usage(argv[0]);

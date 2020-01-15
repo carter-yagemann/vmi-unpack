@@ -95,6 +95,7 @@ sudo cp volatility/vmi.py /usr/lib/python2.7/dist-packages/volatility/plugins/ad
 Required arguments:
     -d <domain_name>         Name of VM to unpack from.
     -r <rekall_file>         Path to rekall file.
+    -e <vol_bin>             Path to Volatility executable.
     -v <vol_profile>         Volatility profile to use.
     -o <output_dir>          Directory to dump layers into.
 

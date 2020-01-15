@@ -272,17 +272,16 @@ out:
 
 void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat)
 {
-    char *cmd_prefix = "/home/wmartin45/bin/";
     addr_t oep;
     addr_t base_va;
     pid_events_t *pid_event = g_hash_table_lookup(vmi_events_by_pid, GINT_TO_POINTER(pid));
 
-    volatility_vaddump(pid, cmd_prefix, dump_count);
-    volatility_vadinfo(pid, cmd_prefix, dump_count);
-    volatility_ldrmodules(pid, cmd_prefix, dump_count);
+    volatility_vaddump(pid, vol_bin, dump_count);
+    volatility_vadinfo(pid, vol_bin, dump_count);
+    volatility_ldrmodules(pid, vol_bin, dump_count);
 
     base_va = pid_event->peb_imagebase_va ? pid_event->peb_imagebase_va : pid_event->vad_pe_start;
-    volatility_impscan(vmi, pid_event, base_va, cmd_prefix, dump_count);
+    volatility_impscan(vmi, pid_event, base_va, vol_bin, dump_count);
 
     oep = event->x86_regs->rip - base_va;
     fprintf(stderr, "%s: rip=%p base_va=%p oep=%p\n", __func__,
@@ -298,7 +297,7 @@ int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
 
     // vmi_pid_t is int32_t which can be int or long
     // so, for pid, we use %ld and cast to long
-    const char *vaddump_cmd = "%svolatility -l vmi://%s --profile=%s vaddump -D %s 2>&1 -p %ld";
+    const char *vaddump_cmd = "%s -l vmi://%s --profile=%s vaddump -D %s 2>&1 -p %ld";
     const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
     char *cmd = NULL;
     const size_t cmd_max = PAGE_SIZE;
@@ -326,7 +325,7 @@ int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
 
     // vmi_pid_t is int32_t which can be int or long
     // so, for pid, we use %ld and cast to long
-    const char *vadinfo_cmd = "%svolatility -l vmi://%s --profile=%s  vadinfo --output=json --output-file=%s 2>&1 -p %ld";
+    const char *vadinfo_cmd = "%s -l vmi://%s --profile=%s  vadinfo --output=json --output-file=%s 2>&1 -p %ld";
     const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
     char *cmd = NULL;
     const size_t cmd_max = PAGE_SIZE;
@@ -354,7 +353,7 @@ int volatility_ldrmodules(vmi_pid_t pid, const char *cmd_prefix, int dump_count)
 
     // vmi_pid_t is int32_t which can be int or long
     // so, for pid, we use %ld and cast to long
-    const char *ldrmodules_cmd = "%svolatility -l vmi://%s --profile=%s"
+    const char *ldrmodules_cmd = "%s -l vmi://%s --profile=%s"
         " ldrmodules --output=json --output-file=%s 2>&1 -p %ld";
     const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
     char *cmd = NULL;
@@ -399,7 +398,7 @@ int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_
 
     // vmi_pid_t is int32_t which can be int or long
     // so, for pid, we use %ld and cast to long
-    const char *impscan_cmd = "%svolatility -l vmi://%s --profile=%s"
+    const char *impscan_cmd = "%s -l vmi://%s --profile=%s"
       " impscan --base 0x%lx --size %zu"
       " --output=json --output-file=%s 2>&1 --pid %ld";
 
