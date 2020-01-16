@@ -39,6 +39,8 @@
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
 
+extern char *vol_bin; // defined in main.c
+
 void process_pending_rescan(gpointer data, gpointer user_data);
 
 int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t vaddr, addr_t paddr)
@@ -883,7 +885,7 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
 
     //the table trap is delayed until the pid is first seen in monitor_handler_cr3()
     //monitor_trap_table(vmi, pid_event);
-    volatility_vadinfo(pid, "", dump_count);
+    volatility_vadinfo(pid, vol_bin, dump_count);
 }
 
 void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)

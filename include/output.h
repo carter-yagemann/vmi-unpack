@@ -34,7 +34,6 @@
 
 
 extern int dump_count;
-extern char *vol_bin;
 
 /**
  * Callback for when a layer is detected via write-then-execute (W2X).

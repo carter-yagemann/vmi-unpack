@@ -42,6 +42,7 @@
 
 /* defined in main.c */
 extern char *domain_name;
+extern char *vol_bin;
 extern char *vol_profile;
 extern char *output_dir;
 
