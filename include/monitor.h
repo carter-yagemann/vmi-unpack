@@ -119,12 +119,38 @@ typedef struct
 
 typedef struct
 {
+    addr_t proc_base_va;
+    void *proc_first_page;
+    struct dos_header *dos_header;
+    struct pe_header *pe_header;
+    uint16_t oh_magic;
+    void *opt_header;
+    struct section_header *section_table;
+} parsed_pe_t;
+
+typedef struct
+{
+    int sequence;
+    int pe_index;
+    parsed_pe_t *parsed_pe;
+    GPtrArray *vadinfo_maps;
+} vadinfo_bundle_t;
+
+typedef struct
+{
     vmi_pid_t pid;
+    char *process_name;
     reg_t cr3;
     uint8_t flags;
     page_table_monitor_cb_t cb;
     GHashTable *write_exec_map;
     GHashTable *wr_traps;
+    GPtrArray *vadinfo_bundles;
+    int vad_pe_index;
+    addr_t vad_pe_start;
+    size_t vad_pe_size;
+    addr_t eprocess;
+    addr_t peb_imagebase_va;
 } pid_events_t;
 
 typedef struct
@@ -188,6 +214,7 @@ void monitor_destroy(vmi_instance_t vmi);
  *                                addresses above 0x70000000. These pages are ignored by default because
  *                                they typically belong to libraries, heap and stack, which is not
  *                                relevant to capturing most packers.
+ *
  * @param cr3 if not NULL, use this for new PIDs cr3
  */
 void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monitor_cb_t cb, uint8_t flags, reg_t cr3);

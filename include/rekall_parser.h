@@ -37,6 +37,7 @@ typedef struct
     gint64 eprocess_pname;
     gint64 eprocess_pid;
     gint64 eprocess_parent_pid;
+    gint64 eprocess_peb;
     gint64 eprocess_tasks;
     gint64 eprocess_objecttable;
     gint64 eprocess_vadroot;
@@ -55,6 +56,7 @@ typedef struct
     gint64 flags_isprivate_end;
     gint64 flags_protection_start;
     gint64 flags_protection_end;
+    gint64 peb_imagebaseaddress;
 } windows_rekall_t;
 
 typedef struct

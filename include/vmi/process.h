@@ -125,8 +125,10 @@ char *vmi_current_name_windows(vmi_instance_t vmi, vmi_event_t *event);
 vmi_pid_t vmi_current_parent_pid_windows(vmi_instance_t vmi, vmi_event_t *event);
 mem_seg_t vmi_current_find_segment_windows(vmi_instance_t vmi, vmi_event_t *event, addr_t addr);
 GHashTable *vmi_get_all_pids_windows(vmi_instance_t vmi);
+addr_t vmi_get_process_by_cr3(vmi_instance_t vmi, addr_t cr3);
 addr_t windows_find_eprocess_pgd(vmi_instance_t vmi, addr_t pgd);
 vmi_pid_t vmi_get_eprocess_pid(vmi_instance_t vmi, addr_t process);
 addr_t vmi_get_eprocess_vadroot(vmi_instance_t vmi, addr_t process);
+addr_t vmi_get_imagebase_windows(vmi_instance_t vmi, addr_t eprocess);
 
 #endif

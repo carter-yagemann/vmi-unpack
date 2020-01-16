@@ -29,6 +29,7 @@
 #include <libvmi/events.h>
 
 #include <monitor.h>
+#include <output.h>
 #include <paging/intel_64.h>
 #include <vmi/process.h>
 
@@ -37,6 +38,8 @@
 
 #define GFN_SHIFT(paddr) ((paddr) >> 12)
 #define PADDR_SHIFT(gfn) ((gfn) << 12)
+
+extern char *vol_bin; // defined in main.c
 
 void process_pending_rescan(gpointer data, gpointer user_data);
 
@@ -81,6 +84,11 @@ int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t
     p_vma->vma.size = vma.size;
 
     return 1;
+}
+
+static inline int addr_in_range(addr_t suspect, addr_t start, size_t size)
+{
+    return (suspect >= start && suspect < (start + size));
 }
 
 // maintain global trapped_pages hash and set memory traps
@@ -177,6 +185,12 @@ void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, m
     if (!exec_map)
     {
         fprintf(stderr, "WARNING: monitor_untrap_vma - Could not find exec_map for pid %d\n", pid);
+        fprintf(stderr, "%s: pid=%d, base_va=0x%lx, paddr=0x%lx\n", __func__,
+                pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
+        fprintf(stderr, "%s: my_pid_events=%p\n", __func__, my_pid_events);
+        fprintf(stderr, "%s: write_exec_map=%p\n", __func__, my_pid_events->write_exec_map);
+        fprintf(stderr, "%s: exec_map=%p\n", __func__, exec_map);
+        vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_N, 0);
         return;
     }
     fprintf(stderr, "monitor_untrap_vma: pid=%d, base_va=0x%lx, paddr=0x%lx\n",
@@ -218,8 +232,11 @@ void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem
         if (!g_hash_table_contains(exec_map, (gpointer)event->mem_event.gfn))
         {
 #ifdef TRACE_TRAPS
-            fprintf(stderr, "monitor_trap_vma: %d, base_va=0x%lx, paddr=0x%lx\n",
+            fprintf(stderr, "%s: pid=%d, base_va=0x%lx, paddr=0x%lx\n", __func__,
                     pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
+            fprintf(stderr, "%s: my_pid_events=%p\n", __func__, my_pid_events);
+            fprintf(stderr, "%s: write_exec_map=%p\n", __func__, my_pid_events->write_exec_map);
+            fprintf(stderr, "%s: exec_map=%p\n", __func__, exec_map);
 #endif
             g_hash_table_add(exec_map, (gpointer)event->mem_event.gfn);
             vmi_set_mem_event(vmi, event->mem_event.gfn, VMI_MEMACCESS_X, 0);
@@ -230,10 +247,13 @@ void monitor_trap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, mem
 void destroy_trapped_page(gpointer val) { g_slice_free(trapped_page_t, val); }
 
 //called by g_hash_table_destroy() when g_hash_table_new_full() is used
-void destroy_watched_pid(gpointer val)
+void destroy_watched_pid(gpointer data)
 {
-    g_hash_table_destroy(((pid_events_t *)val)->write_exec_map);
-    g_hash_table_destroy(((pid_events_t *)val)->wr_traps);
+    pid_events_t *val = (pid_events_t *)data;
+    g_hash_table_destroy(val->write_exec_map);
+    g_hash_table_destroy(val->wr_traps);
+    free(val->process_name);
+    if (val->vadinfo_bundles) g_ptr_array_unref(val->vadinfo_bundles);
     g_slice_free(pid_events_t, val);
 }
 
@@ -250,6 +270,11 @@ pid_events_t *add_new_pid(vmi_pid_t pid)
     pval->wr_traps = g_hash_table_new_full(g_direct_hash, g_direct_equal,
                                            NULL, NULL);
     g_hash_table_insert(vmi_events_by_pid, GINT_TO_POINTER(pid), pval);
+    pval->process_name = NULL;
+    pval->vadinfo_bundles = NULL;
+    pval->vad_pe_index = -1;
+    pval->vad_pe_start = HIGH_ADDR_MARK;
+    pval->vad_pe_size = 0;
     return pval;
 }
 
@@ -496,11 +521,18 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
         {
             if (pid_event)
             {
-                //addr_t rip_pa = 0;
-                //vmi_v2pcache_flush(vmi, evt_cr3);
-                //vmi_pagetable_lookup(vmi, evt_cr3, event->x86_regs->rip, &rip_pa);
                 fprintf(stderr, "%s: trapping table, pid=%d evt_cr3=0x%lx\n", __FUNCTION__, pid, evt_cr3);
                 g_hash_table_insert(cr3_to_pid, (gpointer)evt_cr3, GINT_TO_POINTER(pid));
+                if (!pid_event->process_name)
+                    pid_event->process_name = vmi_current_name(vmi, event);
+                if (find_process_in_vads(vmi, pid_event, dump_count))
+                {
+                    vadinfo_bundle_t *bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
+                    fprintf(stderr, "%s: pid=%d pe_index=%d\n", __FUNCTION__, pid, bundle->pe_index);
+                    //if (bundle->parsed_pe)
+                    //  show_parsed_pe(bundle->parsed_pe);
+                }
+                dump_count++;
                 monitor_trap_table(vmi, pid_event);
             }
             else
@@ -671,6 +703,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
         mem_seg_t vma = vmi_current_find_segment(vmi, event, event->mem_event.gla);
         if (!vma.size)
         {
+            goto after_not_found;
             char mesg[] = "%s:VMA not found"
                           ":pid=%d:curr_pid=%d"
                           ":pid_cr3=0x%lx:event_cr3=0x%lx"
@@ -689,6 +722,7 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
                     pid_pa, evt_pa,
                     event->mem_event.gla, paddr
                    );
+after_not_found:
 
             // write traps are only set by monitor_set_trap() and exec by monitor_trap_vma()
             if (event->mem_event.out_access & VMI_MEMACCESS_W)
@@ -710,7 +744,9 @@ event_response_t monitor_handler(vmi_instance_t vmi, vmi_event_t *event)
         if (event->mem_event.out_access & VMI_MEMACCESS_X)
         {
             if ((my_pid_events->flags & MONITOR_HIGH_ADDRS) || event->mem_event.gla < HIGH_ADDR_MARK)
-                if (check_prev_vma(vmi, event, pid, event->mem_event.gla, paddr))
+                if (check_prev_vma(vmi, event, pid, event->mem_event.gla, paddr)
+                    && addr_in_range(event->x86_regs->rip, my_pid_events->vad_pe_start, my_pid_events->vad_pe_size)
+                   )
                     my_pid_events->cb(vmi, event, pid, trap->cat);
             monitor_untrap_vma(vmi, event, pid, vma);
         }
@@ -841,12 +877,16 @@ void monitor_add_page_table(vmi_instance_t vmi, vmi_pid_t pid, page_table_monito
     else pid_event->cr3 = cr3;
     pid_event->flags = flags;
     pid_event->cb = cb;
+    pid_event->eprocess = vmi_get_process_by_cr3(vmi, pid_event->cr3);
+    pid_event->peb_imagebase_va = vmi_get_imagebase_windows(vmi, pid_event->eprocess);
     //set the pid to 0 as a flag that its page table has not been scanned yet
     //then delay trapping its page table until it first executes
     g_hash_table_insert(cr3_to_pid, (gpointer)pid_event->cr3, 0);
     fprintf(stderr, "%s: pid=%d cr3=0x%lx\n", __FUNCTION__, pid, pid_event->cr3);
 
+    //the table trap is delayed until the pid is first seen in monitor_handler_cr3()
     //monitor_trap_table(vmi, pid_event);
+    volatility_vadinfo(pid, vol_bin, dump_count);
 }
 
 void monitor_remove_page_table(vmi_instance_t vmi, vmi_pid_t pid)

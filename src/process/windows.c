@@ -427,3 +427,25 @@ void vmi_list_all_processes_windows(vmi_instance_t vmi, vmi_event_t *event)
             break;
     }
 }
+
+addr_t vmi_get_imagebase_windows(vmi_instance_t vmi, addr_t eprocess)
+{
+    addr_t peb_offset = process_vmi_windows_rekall.eprocess_peb;
+    addr_t peb_ptr;
+    addr_t iba_offset = process_vmi_windows_rekall.peb_imagebaseaddress;
+    addr_t iba_ptr;
+
+    if (vmi_read_addr_va(vmi, eprocess + peb_offset, 0, &peb_ptr) != VMI_SUCCESS)
+    {
+        fprintf(stderr, "%s: read of peb_ptr failed\n", __FUNCTION__);
+        return 0;
+    }
+
+    if (vmi_read_addr_va(vmi, peb_ptr + iba_offset, 0, &iba_ptr) != VMI_SUCCESS)
+    {
+        fprintf(stderr, "%s: read of iba_ptr failed\n", __FUNCTION__);
+        return 0;
+    }
+
+    return iba_ptr;
+}

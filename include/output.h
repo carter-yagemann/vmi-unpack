@@ -25,14 +25,15 @@
 
 #include <libvmi/libvmi.h>
 
-typedef struct
-{
-    char *buf;
-    size_t size;
-    vmi_pid_t pid;
-} pe_dump_t;
+#define MAX_PE_HEADER_SIZE 1024
+//section header permissions
+#define IMAGE_SCN_CNT_CODE (1<<5)
+#define IMAGE_SCN_MEM_EXECUTE (1<<29)
+#define IMAGE_SCN_MEM_READ (1<<30)
+#define IMAGE_SCN_MEM_WRITE (1<<31)
 
-typedef void (*traverse_func)(vmi_instance_t, addr_t, void *);
+
+extern int dump_count;
 
 /**
  * Callback for when a layer is detected via write-then-execute (W2X).
@@ -44,17 +45,24 @@ typedef void (*traverse_func)(vmi_instance_t, addr_t, void *);
  * @param cat The type of page that the event triggered on.
  */
 void process_layer(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
-void vad_dump_process(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
-void volatility_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
 
 /**
- * Iterates over a VAD tree
+ * Callback for when a layer is detected via write-then-execute (W2X).
+ * Use external Volatility suite to dump the process VADs. Windows only.
  *
  * @param vmi A libVMI instance.
- * @param node The current node
- * @param func The function to call on each iteration
- * @param data User-specified data
+ * @param event The VMI event triggered by W2X.
+ * @param pid The PID of the process that triggered the event.
+ * @param cat The type of page that the event triggered on.
  */
-void vad_iterator(vmi_instance_t vmi, addr_t node, traverse_func func, void *data);
+void volatility_callback_vaddump(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, page_cat_t page_cat);
+
+int volatility_vaddump(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
+int volatility_vadinfo(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
+int volatility_ldrmodules(vmi_pid_t pid, const char *cmd_prefix, int dump_count);
+int volatility_impscan(vmi_instance_t vmi, pid_events_t *pid_event, addr_t base_va, const char *cmd_prefix, int dump_count);
+char *make_vadinfo_json_fn(vmi_pid_t pid, int count);
+gboolean find_process_in_vads(vmi_instance_t vmi, pid_events_t *pid_evts, int count);
+void show_parsed_pe(parsed_pe_t *pe, FILE *out_fd);
 
 #endif
