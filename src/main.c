@@ -38,6 +38,7 @@ char *process_name = NULL;
 char *vol_profile = NULL;
 char *output_dir = NULL;
 char *rekall = NULL;
+char *vol_bin = NULL;
 vmi_pid_t process_pid = 0;
 uint8_t tracking_flags = MONITOR_FOLLOW_REMAPPING;
 
@@ -58,6 +59,7 @@ void usage(char *name)
     printf("Required arguments:\n");
     printf("    -d <domain_name>         Name of VM to unpack from.\n");
     printf("    -r <rekall_file>         Path to rekall file.\n");
+    printf("    -e <vol_bin>             Path to Volatility executable.\n");
     printf("    -v <vol_profile>         Volatility profile to use.\n");
     printf("    -o <output_dir>          Directory to dump layers into.\n");
     printf("\n");
@@ -78,7 +80,6 @@ event_response_t monitor_pid(vmi_instance_t vmi, vmi_event_t *event)
     {
         fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
-        // monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
         monitor_add_page_table(vmi, pid, volatility_callback_vaddump, tracking_flags, 0);
         monitor_remove_cr3(monitor_pid);
     }
@@ -96,7 +97,6 @@ event_response_t monitor_name(vmi_instance_t vmi, vmi_event_t *event)
         process_pid = pid;
         fprintf(stderr, "*********** FOUND PARENT: PID %d *****\n", pid);
         // monitor_add_page_table(vmi, pid, process_layer, tracking_flags, 0);
-        // monitor_add_page_table(vmi, pid, vad_dump_process, tracking_flags, 0);
         monitor_add_page_table(vmi, pid, volatility_callback_vaddump, tracking_flags, 0);
         monitor_remove_cr3(monitor_name);
     }
@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
     int c;
 
     // Parse arguments
-    while ((c = getopt(argc, argv, "d:r:v:o:p:n:fl")) != -1)
+    while ((c = getopt(argc, argv, "d:r:e:v:o:p:n:fl")) != -1)
     {
         switch (c)
         {
@@ -122,6 +122,9 @@ int main(int argc, char *argv[])
                 break;
             case 'r':
                 rekall = optarg;
+                break;
+            case 'e':
+                vol_bin = optarg;
                 break;
             case 'v':
                 vol_profile = optarg;
@@ -147,17 +150,10 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!domain_name || !rekall || !vol_profile || !output_dir ||
+    if (!domain_name || !rekall || !vol_bin || !vol_profile || !output_dir ||
         (process_pid == 0 && process_name == NULL))
     {
         usage(argv[0]);
-        return EXIT_FAILURE;
-    }
-
-    // santity checks for volatility
-    if (system("which volatility"))
-    {
-        fprintf(stderr, "ERROR: Unpack - volatility not found in path.\n");
         return EXIT_FAILURE;
     }
 
@@ -173,6 +169,7 @@ int main(int argc, char *argv[])
 
     // start all child threads below
     start_dump_thread(output_dir);
+    start_shell_thread();
     // end child thread creation
 
     // Register signal handler. only main thread will handle them.
@@ -223,6 +220,7 @@ int main(int argc, char *argv[])
         monitor_destroy(vmi);
         vmi_destroy(vmi);
         stop_dump_thread();
+        stop_shell_thread();
         return EXIT_FAILURE;
     }
 
@@ -250,6 +248,7 @@ int main(int argc, char *argv[])
     // Cleanup
     stop_dump_thread();
     fprintf(stderr, "dump thread stopped\n");
+    stop_shell_thread();
     monitor_destroy(vmi);
     process_vmi_destroy(vmi);
 

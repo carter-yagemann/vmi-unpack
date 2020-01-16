@@ -213,7 +213,7 @@ def run_sample(filepath):
     log.debug("Starting unpacker")
     unpack_dir = tempfile.mkdtemp(prefix='vmi-output-')
     unpack_log = os.path.join(unpack_dir, 'unpack.log')
-    unpack_cmd = [utils['unpack'], '-d', guest.name(), '-r', config['rekall'],
+    unpack_cmd = [utils['unpack'], '-d', guest.name(), '-r', config['rekall'], '-e', config['vol_bin'],
                   '-v', config['vol_prof'], '-o', unpack_dir, '-n', 'sample.exe', '-f']
     if config['use_sudo']:
         unpacker = run_cmd(unpack_cmd, sudo=True, async=True, logfile=unpack_log)
@@ -330,6 +330,7 @@ def parse_conf(conf_fd):
             'use_sudo': config.getboolean('main', 'use_sudo'),
             'rekall':   config.get('main', 'rekall'),
             'xml_conf': config.get('main', 'xml_conf'),
+            'vol_bin':  config.get('main', 'vol_bin'),
             'vol_prof': config.get('main', 'vol_prof'),
         }
     except (NoOptionError, ValueError) as e:
