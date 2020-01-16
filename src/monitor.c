@@ -88,7 +88,7 @@ int check_prev_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, addr_t
 
 static inline int addr_in_range(addr_t suspect, addr_t start, size_t size)
 {
-  return (suspect >= start && suspect < (start + size));
+    return (suspect >= start && suspect < (start + size));
 }
 
 // maintain global trapped_pages hash and set memory traps
@@ -186,7 +186,7 @@ void monitor_untrap_vma(vmi_instance_t vmi, vmi_event_t *event, vmi_pid_t pid, m
     {
         fprintf(stderr, "WARNING: monitor_untrap_vma - Could not find exec_map for pid %d\n", pid);
         fprintf(stderr, "%s: pid=%d, base_va=0x%lx, paddr=0x%lx\n", __func__,
-            pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
+                pid, vma.base_va, PADDR_SHIFT(event->mem_event.gfn));
         fprintf(stderr, "%s: my_pid_events=%p\n", __func__, my_pid_events);
         fprintf(stderr, "%s: write_exec_map=%p\n", __func__, my_pid_events->write_exec_map);
         fprintf(stderr, "%s: exec_map=%p\n", __func__, exec_map);
@@ -524,12 +524,13 @@ event_response_t monitor_handler_cr3(vmi_instance_t vmi, vmi_event_t *event)
                 fprintf(stderr, "%s: trapping table, pid=%d evt_cr3=0x%lx\n", __FUNCTION__, pid, evt_cr3);
                 g_hash_table_insert(cr3_to_pid, (gpointer)evt_cr3, GINT_TO_POINTER(pid));
                 if (!pid_event->process_name)
-                  pid_event->process_name = vmi_current_name(vmi, event);
-                if (find_process_in_vads(vmi, pid_event, dump_count)) {
-                  vadinfo_bundle_t *bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
-                  fprintf(stderr, "%s: pid=%d pe_index=%d\n", __FUNCTION__, pid, bundle->pe_index);
-                  //if (bundle->parsed_pe)
-                  //  show_parsed_pe(bundle->parsed_pe);
+                    pid_event->process_name = vmi_current_name(vmi, event);
+                if (find_process_in_vads(vmi, pid_event, dump_count))
+                {
+                    vadinfo_bundle_t *bundle = g_ptr_array_index(pid_event->vadinfo_bundles, dump_count);
+                    fprintf(stderr, "%s: pid=%d pe_index=%d\n", __FUNCTION__, pid, bundle->pe_index);
+                    //if (bundle->parsed_pe)
+                    //  show_parsed_pe(bundle->parsed_pe);
                 }
                 dump_count++;
                 monitor_trap_table(vmi, pid_event);
@@ -745,7 +746,7 @@ after_not_found:
             if ((my_pid_events->flags & MONITOR_HIGH_ADDRS) || event->mem_event.gla < HIGH_ADDR_MARK)
                 if (check_prev_vma(vmi, event, pid, event->mem_event.gla, paddr)
                     && addr_in_range(event->x86_regs->rip, my_pid_events->vad_pe_start, my_pid_events->vad_pe_size)
-                    )
+                   )
                     my_pid_events->cb(vmi, event, pid, trap->cat);
             monitor_untrap_vma(vmi, event, pid, vma);
         }

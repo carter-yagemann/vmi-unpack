@@ -323,7 +323,7 @@ void *shell_worker_loop(void *data)
         {
             break; // signal to stop
         }
-        if ( strcmp("", cmd->cmd) != 0 )
+        if (strcmp("", cmd->cmd) != 0)
         {
             capture_cmd(cmd->cmd, cmd->out_fn);
         }
